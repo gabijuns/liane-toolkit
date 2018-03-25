@@ -4,6 +4,7 @@ import Loading from "/imports/ui/components/utils/Loading.jsx";
 import Alerts from "/imports/ui/utils/Alerts.js";
 import AudiencesIndexTable from "/imports/ui/components/audiences/AudiencesIndexTable.jsx";
 import AudienceGeolocationSummaryContainer from "/imports/ui/containers/audiences/AudienceGeolocationSummaryContainer.jsx";
+import AudienceMapContainer from "/imports/ui/containers/audiences/AudienceMapContainer.jsx";
 import AudienceCategoriesListContainer from "/imports/ui/containers/audiences/AudienceCategoriesListContainer.jsx";
 import AudienceCategoryContainer from "/imports/ui/containers/audiences/AudienceCategoryContainer.jsx";
 import AudienceGeolocationContainer from "/imports/ui/containers/audiences/AudienceGeolocationContainer.jsx";
@@ -76,6 +77,11 @@ export default class CampaignsAudience extends React.Component {
                 <Grid.Column>
                   {account ? (
                     <div>
+                      <AudienceMapContainer
+                        campaignId={campaign._id}
+                        facebookAccountId={account.facebookId}
+                        geolocationId={geolocationId}
+                      />
                       <AudienceGeolocationSummaryContainer
                         campaignId={campaign._id}
                         facebookAccountId={account.facebookId}

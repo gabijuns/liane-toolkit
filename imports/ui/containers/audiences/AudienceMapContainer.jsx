@@ -1,0 +1,41 @@
+import { Meteor } from "meteor/meteor";
+import { ReactiveVar } from "meteor/reactive-var";
+import { withTracker } from "meteor/react-meteor-data";
+import AudienceMap from "/imports/ui/components/audiences/AudienceMap.jsx";
+
+const geolocationSummary = new ReactiveVar(null);
+const loading = new ReactiveVar(false);
+let current = null;
+
+export default withTracker(props => {
+  if (
+    !current ||
+    (current.params.campaignId !== FlowRouter.current().params.campaignId ||
+      current.params.facebookId !== FlowRouter.current().params.facebookId)
+  ) {
+    current = FlowRouter.current();
+    loading.set(true);
+    Meteor.call(
+      "audiences.accountGeolocationSummary",
+      {
+        campaignId: props.campaignId,
+        facebookAccountId: props.facebookAccountId
+      },
+      (error, data) => {
+        if (error) {
+          console.warn(error);
+        }
+        loading.set(false);
+        if (JSON.stringify(geolocationSummary.get()) !== JSON.stringify(data)) {
+          geolocationSummary.set(data);
+        }
+      }
+    );
+  }
+
+  return {
+    ...props,
+    loading: loading.get(),
+    summary: geolocationSummary.get()
+  };
+})(AudienceMap);
