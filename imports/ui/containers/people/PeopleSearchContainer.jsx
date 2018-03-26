@@ -11,6 +11,7 @@ export default withTracker(props => {
   let people, totalCount;
   if (subsHandle.isReady()) {
     people = subsHandle.fetch();
+    console.log(people);
     totalCount = subsHandle.count();
   }
 

@@ -13,6 +13,9 @@
     "host": "0.0.0.0",
     "port": "6379"
   },
+  "elasticsearch": {
+    "host": "localhost:9200"
+  },
   "email": {
     "mail": {
       "host": "smtp.gmail.com",

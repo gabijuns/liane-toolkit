@@ -34,12 +34,14 @@ dynamic-import@0.3.0
 easy:search@2.2.1
 easysearch:components@2.2.1
 easysearch:core@2.2.0
+easysearch:elasticsearch@2.2.0
 ecmascript@0.10.5
 ecmascript-runtime@0.5.0
 ecmascript-runtime-client@0.6.2
 ecmascript-runtime-server@0.5.0
 ejson@1.1.0
 email@1.2.3
+erasaur:meteor-lodash@4.0.0
 es5-shim@4.7.3
 facebook-oauth@1.4.0
 fortawesome:fontawesome@4.7.0

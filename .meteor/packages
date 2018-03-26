@@ -46,3 +46,4 @@ xolvio:cleaner
 practicalmeteor:chai
 practicalmeteor:mocha
 easy:search
+easysearch:elasticsearch
