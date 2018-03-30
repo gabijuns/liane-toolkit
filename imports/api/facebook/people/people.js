@@ -63,6 +63,85 @@ const PeopleIndex = new Index({
   }
 });
 
+People.search = function({ search, options }) {
+  logger.debug("people.search called", { search, options });
+  const userId = Meteor.userId();
+  const campaignId = search.campaignId;
+
+  const campaign = Campaigns.findOne(campaignId);
+
+  if (!userId || !campaignId) {
+    throw new Meteor.Error(500, "Invalid request.");
+  }
+  if (!_.findWhere(campaign.users, { userId })) {
+    throw new Meteor.Error(401, "Not allowed");
+  }
+
+  let sort = ["_score"];
+
+  if (options.sort) {
+    switch (options.sort) {
+      case "comments":
+        if (options.facebookId) {
+          sort.unshift({
+            [`counts.${options.facebookId}.comments`]: { order: "desc" }
+          });
+        }
+        break;
+      case "reactions":
+        if (options.facebookId) {
+          sort.unshift({
+            [`counts.${options.facebookId}.likes`]: { order: "desc" }
+          });
+        }
+      default:
+    }
+  }
+
+  let query = {
+    bool: {
+      must: [
+        {
+          match: {
+            campaignId: campaignId
+          }
+        }
+      ],
+      should: []
+    }
+  };
+
+  for (const prop in search) {
+    if (search[prop]) {
+      switch (prop) {
+        case "campaignId":
+          break;
+        case "q":
+          query.bool.must.push({
+            multi_match: {
+              query: `*${search[prop]}*`,
+              fields: ["name", "campaignMeta.contact.email"]
+            }
+          });
+          break;
+        default:
+          query.bool.must.push({
+            match: { [prop]: search[prop] }
+          });
+      }
+    }
+  }
+
+  return elastic.searchAsync({
+    index: "people",
+    type: "_doc",
+    body: {
+      sort,
+      query
+    }
+  });
+};
+
 People.schema = new SimpleSchema({
   facebookId: {
     type: String,

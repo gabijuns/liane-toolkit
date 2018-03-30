@@ -2,27 +2,6 @@ import { People, PeopleIndex } from "../people.js";
 import { Campaigns } from "/imports/api/campaigns/campaigns.js";
 import _ from "underscore";
 
-Meteor.publish("people.campaignSearch", function({ search, options }) {
-  logger.debug("people.campaignSearch called", {
-    search,
-    options
-  });
-  check(search, Object);
-  check(options, Object);
-  const userId = this.userId;
-  if (userId) {
-    if (options.props.campaignId) {
-      const campaign = Campaigns.findOne(options.props.campaignId);
-      const allowed = _.findWhere(campaign.users, { userId });
-      if (allowed) {
-        const cursor = PeopleIndex.search(search, options);
-        return cursor.mongoCursor;
-      }
-    }
-  }
-  return this.ready();
-});
-
 Meteor.publish("people.detail", function({ personId }) {
   logger.debug("people.detail called", { personId });
 

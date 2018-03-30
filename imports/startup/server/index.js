@@ -1,6 +1,7 @@
 import "./globals.js";
 import "./logger.js";
 import "./redis.js";
+import "./elastic.js";
 if (!Meteor.settings.public.server || Meteor.settings.public.server == "main") {
   import "./accounts.js";
   import "./api.js";

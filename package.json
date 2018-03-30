@@ -11,6 +11,7 @@
     "axios": "^0.17.1",
     "babel-runtime": "^6.26.0",
     "chart.js": "^2.7.0",
+    "elasticsearch": "^14.2.2",
     "faker": "^4.1.0",
     "fb": "^2.0.0",
     "flat": "^4.0.0",

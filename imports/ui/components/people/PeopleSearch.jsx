@@ -53,16 +53,11 @@ export default class PeopleSearch extends React.Component {
     super(props);
     this.state = {
       search: {
-        name: ""
+        q: ""
       },
       options: {
-        limit: 10,
-        skip: 0,
-        props: {
-          sortBy: "name",
-          facebookId: props.facebookId,
-          campaignId: props.campaignId
-        }
+        sort: "auto",
+        facebookId: props.facebookId
       }
     };
     this._handleSearchChange = this._handleSearchChange.bind(this);
@@ -77,34 +72,27 @@ export default class PeopleSearch extends React.Component {
       this.setState({
         options: {
           ...options,
-          props: {
-            ...options.props,
-            facebookId: nextProps.facebookId
-          }
+          facebookId: nextProps.facebookId
         }
       });
     }
   }
   _toggleMeta = prop => {
     return () => {
-      const { options } = this.state;
-      if (!options.props[`campaignMeta.${prop}`]) {
+      const { search } = this.state;
+      if (!search[`campaignMeta.${prop}`]) {
         this.setState({
-          options: {
-            ...options,
-            props: {
-              ...options.props,
-              [`campaignMeta.${prop}`]: true
-            }
+          search: {
+            ...search,
+            [`campaignMeta.${prop}`]: true
           }
         });
       } else {
-        let newProps = { ...options.props };
-        delete newProps[`campaignMeta.${prop}`];
+        let newSearch = { ...search };
+        delete newSearch[`campaignMeta.${prop}`];
         this.setState({
-          options: {
-            ...options,
-            props: newProps
+          search: {
+            ...newSearch
           }
         });
       }
@@ -121,7 +109,7 @@ export default class PeopleSearch extends React.Component {
     this.setState({
       options: {
         ...options,
-        props: { ...options.props, sortBy: value }
+        sort: value
       }
     });
   }, 250);
@@ -139,7 +127,7 @@ export default class PeopleSearch extends React.Component {
                 fluid
                 control={Input}
                 placeholder="Type a name..."
-                name="name"
+                name="q"
                 onChange={this._handleSearchChange}
               />
             </Grid.Column>
@@ -151,7 +139,7 @@ export default class PeopleSearch extends React.Component {
                     key={flag.prop}
                     trigger={
                       <Button
-                        active={options.props[`campaignMeta.${flag.prop}`]}
+                        active={search[`campaignMeta.${flag.prop}`]}
                         icon={flag.icon}
                         onClick={this._toggleMeta(flag.prop)}
                       />
@@ -166,13 +154,13 @@ export default class PeopleSearch extends React.Component {
               <Form.Field
                 control={Select}
                 onChange={this._handleSortChange}
-                value={options.props.sortBy}
+                value={options.sort}
                 fluid
                 options={[
                   {
-                    key: "name",
-                    value: "name",
-                    text: "Name"
+                    key: "auto",
+                    value: "auto",
+                    text: "Auto"
                   },
                   {
                     key: "comments",

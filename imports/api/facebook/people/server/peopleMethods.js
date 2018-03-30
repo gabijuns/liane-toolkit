@@ -4,6 +4,39 @@ import { Campaigns } from "/imports/api/campaigns/campaigns.js";
 import { flattenObject } from "/imports/utils/common.js";
 import _ from "underscore";
 
+export const peopleSearch = new ValidatedMethod({
+  name: "people.search",
+  validate: new SimpleSchema({
+    campaignId: {
+      type: String
+    },
+    query: {
+      type: Object,
+      blackbox: true
+    },
+    options: {
+      type: Object,
+      blackbox: true
+    }
+  }).validator(),
+  run({ campaignId, query, options }) {
+    logger.debug("people.search called", {
+      campaignId,
+      query
+    });
+
+    const result = People.search({
+      search: {
+        ...query,
+        campaignId
+      },
+      options
+    });
+
+    return result.hits;
+  }
+});
+
 export const updatePersonMeta = new ValidatedMethod({
   name: "facebook.people.updatePersonMeta",
   validate: new SimpleSchema({
