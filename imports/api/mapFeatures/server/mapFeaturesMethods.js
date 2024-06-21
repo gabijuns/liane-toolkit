@@ -38,7 +38,14 @@ export const createMapFeature = new ValidatedMethod({
       throw new Meteor.Error(401, "You need to login");
     }
 
-    if (!Meteor.call("campaigns.canManage", { campaignId, userId })) {
+    if (
+      !Meteor.call("campaigns.userCan", {
+        campaignId,
+        userId,
+        feature: "map",
+        permission: "edit"
+      })
+    ) {
       throw new Meteor.Error(400, "Not allowed");
     }
 
@@ -48,7 +55,15 @@ export const createMapFeature = new ValidatedMethod({
     if (description) insertDoc.description = description;
     if (color) insertDoc.color = color;
 
-    return MapFeatures.insert(insertDoc);
+    const res = MapFeatures.insert(insertDoc);
+
+    Meteor.call("log", {
+      type: "map.features.add",
+      campaignId,
+      data: { mapFeatureId: res }
+    });
+
+    return res;
   }
 });
 
@@ -59,6 +74,10 @@ export const updateMapFeature = new ValidatedMethod({
       type: String
     },
     title: {
+      type: String,
+      optional: true
+    },
+    mapLayerId: {
       type: String,
       optional: true
     },
@@ -80,7 +99,7 @@ export const updateMapFeature = new ValidatedMethod({
       optional: true
     }
   }).validator(),
-  run({ id, title, description, color, type, geometry }) {
+  run({ id, title, mapLayerId, description, color, type, geometry }) {
     this.unblock();
     logger.debug("mapFeatures.update", { id });
 
@@ -96,9 +115,11 @@ export const updateMapFeature = new ValidatedMethod({
     }
 
     if (
-      !Meteor.call("campaigns.canManage", {
+      !Meteor.call("campaigns.userCan", {
         campaignId: feature.campaignId,
-        userId
+        userId,
+        feature: "map",
+        permission: "edit"
       })
     ) {
       throw new Meteor.Error(400, "Not allowed");
@@ -107,12 +128,21 @@ export const updateMapFeature = new ValidatedMethod({
     let $set = {};
 
     if (title) $set.title = title;
+    if (mapLayerId) $set.mapLayerId = mapLayerId;
     if (description) $set.description = description;
     if (color) $set.color = color;
     if (type) $set.type = type;
     if (geometry) $set.geometry = geometry;
 
-    return MapFeatures.update(id, { $set });
+    const res = MapFeatures.update(id, { $set });
+
+    Meteor.call("log", {
+      type: "map.features.edit",
+      campaignId: feature.campaignId,
+      data: { mapFeatureId: id }
+    });
+
+    return res;
   }
 });
 
@@ -138,6 +168,25 @@ export const removeMapFeature = new ValidatedMethod({
       throw new Meteor.Error(404, "Feature not found");
     }
 
-    return MapFeatures.remove(id);
+    if (
+      !Meteor.call("campaigns.userCan", {
+        campaignId: feature.campaignId,
+        userId,
+        feature: "map",
+        permission: "edit"
+      })
+    ) {
+      throw new Meteor.Error(400, "Not allowed");
+    }
+
+    const res = MapFeatures.remove(id);
+
+    Meteor.call("log", {
+      type: "map.features.remove",
+      campaignId: feature.campaignId,
+      data: { mapFeatureId: id }
+    });
+
+    return res;
   }
 });

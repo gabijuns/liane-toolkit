@@ -7,10 +7,9 @@ import Button from "../Button.jsx";
 import Loading from "../Loading.jsx";
 
 const Container = styled.section`
-  flex: 1 1 100%;
   display: flex;
   flex-direction: column;
-  min-height: 300px;
+  height: 300px;
   overflow: hidden;
   header {
     border-radius: 7px 7px 0 0;
@@ -157,7 +156,7 @@ export default class PeopleBlock extends Component {
             </p>
           ) : null}
         </div>
-        {!loading ? (
+        {/* {!loading ? (
           <footer>
             <Button.Group>
               {people.length ? (
@@ -177,7 +176,7 @@ export default class PeopleBlock extends Component {
               </Button>
             </Button.Group>
           </footer>
-        ) : null}
+        ) : null} */}
       </Container>
     );
   }

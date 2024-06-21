@@ -14,7 +14,7 @@ class AlertStore {
     if (!config.timeout) {
       config.timeout = type == "success" && !config.verbose ? 1 : 3;
     }
-    if (content.error) {
+    if (content && content.error) {
       type = "error";
       content =
         content.message || content.reason || "Ocorreu um erro inesperado.";

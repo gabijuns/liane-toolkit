@@ -1,5 +1,6 @@
 import React, { Component } from "react";
 import { IntlProvider, addLocaleData } from "react-intl";
+import { ClientStorage } from "meteor/ostrio:cstorage";
 
 import en from "react-intl/locale-data/en";
 import es from "react-intl/locale-data/es";
@@ -16,13 +17,16 @@ import Modal from "../containers/Modal.jsx";
 import Alerts from "../containers/Alerts.jsx";
 import Page from "../components/Page.jsx";
 import AuthConfirm from "../components/AuthConfirm.jsx";
+import InviteNotification from "../components/InviteNotification.jsx";
 
-const language =
+import { FeedbackButton } from "../components/Feedback.jsx";
+
+let language =
   (navigator.languages && navigator.languages[0]) ||
   navigator.language ||
   navigator.userLanguage;
 
-const findLocale = language => {
+const findLocale = (language) => {
   let locale = false;
   const languageWRC = language.toLowerCase().split(/[_-]+/)[0];
   for (const key in localeData) {
@@ -40,13 +44,45 @@ const findLocale = language => {
   return locale;
 };
 
-const messages = localeData[findLocale(language)] || localeData.en;
-
-const publicRoutes = ["App.dashboard", "App.transparency"];
+const publicRoutes = [
+  "App.dashboard",
+  "App.transparency",
+  "App.register",
+  "App.resetPassword",
+];
 
 export default class AppLayout extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      locale: "en",
+    };
+  }
+  componentDidMount() {
+    this.setLanguage();
+  }
+  componentDidUpdate(prevProps) {
+    if (this.props.user && !prevProps.user) {
+      this.setLanguage();
+    }
+  }
+  setLanguage = () => {
+    const { user } = this.props;
+    const sessionLanguage = ClientStorage.get("language");
+    if (user && user.userLanguage) language = user.userLanguage;
+    if (sessionLanguage) language = sessionLanguage;
+    const locale = localeData[findLocale(language)] ? language : "en";
+    if (user && !user.userLanguage) {
+      Meteor.call("users.setLanguage", { language: locale });
+    }
+    ClientStorage.set("language", locale);
+    this.setState({
+      locale,
+    });
+    updateDepsLocales(locale);
+  };
   componentWillReceiveProps({ isLoggedIn, connected, routeName }) {
-    FlowRouter.withReplaceState(function() {
+    FlowRouter.withReplaceState(function () {
       if (connected && !isLoggedIn && publicRoutes.indexOf(routeName) == -1) {
         FlowRouter.go("App.dashboard");
       }
@@ -54,6 +90,8 @@ export default class AppLayout extends Component {
   }
   render() {
     const { ready, connected, isLoggedIn, campaign, user } = this.props;
+    const { locale } = this.state;
+    const messages = localeData[locale];
     let content;
     if (!this.props.content) {
       if (campaign) {
@@ -66,14 +104,16 @@ export default class AppLayout extends Component {
     }
     if (connected && ready) {
       return (
-        <IntlProvider locale={language} messages={messages}>
+        <IntlProvider locale={locale} messages={messages}>
           <div id="app">
             <Page {...this.props}>
+              <InviteNotification invite={this.props.invite} />
               <content.component {...this.props} />
             </Page>
             <Modal />
             <Alerts />
             {user ? <AuthConfirm user={user} /> : null}
+            <FeedbackButton />
           </div>
         </IntlProvider>
       );

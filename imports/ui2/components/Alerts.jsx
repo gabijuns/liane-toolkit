@@ -18,7 +18,7 @@ const Container = styled.div`
     display: flex;
     align-items: center;
     flex-direction: column;
-    margin-top: 50px;
+    margin-top: 70px;
   }
 `;
 
@@ -35,7 +35,7 @@ const Alert = styled.div`
   text-align: center;
   cursor: default;
   &.success {
-    background: #006633;
+    background: #f9ae3b;
     .alert-text {
       margin-left: 1rem;
     }
@@ -64,7 +64,7 @@ const Alert = styled.div`
       `}
   }
   &.error {
-    background: #cc0000;
+    background: #ca3333;
   }
 `;
 

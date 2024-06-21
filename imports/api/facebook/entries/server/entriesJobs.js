@@ -1,16 +1,17 @@
 const { EntriesHelpers } = require("./entriesHelpers.js");
 // import moment from "moment";
 const {
-  LikesHelpers
+  LikesHelpers,
 } = require("/imports/api/facebook/likes/server/likesHelpers.js");
 const {
-  CommentsHelpers
+  CommentsHelpers,
 } = require("/imports/api/facebook/comments/server/commentsHelpers.js");
 
 const EntriesJobs = {
   "entries.updateAccountEntries": {
     run({ job }) {
       logger.debug("entries.updateAccountEntries job: called");
+      logger.info(`entries.updateAccountEntries job started: ${JSON.stringify(job)}`);
       check(job && job.data && job.data.campaignId, String);
       check(job && job.data && job.data.facebookId, String);
       const campaignId = job.data.campaignId;
@@ -19,19 +20,21 @@ const EntriesJobs = {
       const todayTs = new Date().getTime();
       const DAY_IN_MS = 24 * 60 * 60 * 1000;
       const isRecent = todayTs - createdTs < DAY_IN_MS;
-      const likeDateEstimate = job._doc.repeated > 0 && isRecent;
+      // const likeDateEstimate = job._doc.repeated > 0 && isRecent;
+      const likeDateEstimate = false;
       let errored = false;
       try {
         EntriesHelpers.updateAccountEntries({
           campaignId,
           facebookId,
           likeDateEstimate,
-          forceUpdate: false
+          forceUpdate: false,
         });
       } catch (error) {
         errored = true;
         return job.fail(error.message);
       } finally {
+        logger.info(`entries.updateAccountEntries job finished: ${JSON.stringify(job)}`);
         if (!errored) {
           job.done();
           return job.remove();
@@ -40,26 +43,27 @@ const EntriesJobs = {
     },
 
     workerOptions: {
-      concurrency: 2,
-      pollInterval: 2500
+      concurrency: 1,
+      pollInterval: 2500,
     },
 
     jobOptions() {
       const options = {
         retry: {
           retries: 1,
-          wait: 5 * 60 * 1000
+          wait: 5 * 60 * 1000,
         },
         repeat: {
-          wait: 2 * 60 * 60 * 1000
-        }
+          wait: 2 * 60 * 60 * 1000,
+        },
       };
       return options;
-    }
+    },
   },
   "entries.refetchAccountEntries": {
     run({ job }) {
       logger.debug("entries.refetchAccountEntries job: called");
+      logger.info(`entries.refetchAccountEntries job started: ${JSON.stringify(job)}`);
       check(job && job.data && job.data.facebookId, String);
       const campaignId = job.data.campaignId;
       const facebookId = job.data.facebookId;
@@ -69,12 +73,13 @@ const EntriesJobs = {
           campaignId,
           facebookId,
           likeDateEstimate: false,
-          forceUpdate: true
+          forceUpdate: true,
         });
       } catch (error) {
         errored = true;
         return job.fail(error.message);
       } finally {
+        logger.info(`entries.refetchAccountEntries job finished: ${JSON.stringify(job)}`);
         if (!errored) {
           job.done();
           return job.remove();
@@ -84,22 +89,23 @@ const EntriesJobs = {
 
     workerOptions: {
       concurrency: 2,
-      pollInterval: 2500
+      pollInterval: 2500,
     },
 
     jobOptions() {
       const options = {
         retry: {
           retries: 1,
-          wait: 5 * 60 * 1000
-        }
+          wait: 5 * 60 * 1000,
+        },
       };
       return options;
-    }
+    },
   },
   "entries.updateEntryInteractions": {
     run({ job }) {
       logger.debug("entries.updateEntryInteractions job: called");
+      logger.info(`entries.updateEntryInteractions job started: ${JSON.stringify(job)}`);
       check(job && job.data && job.data.facebookAccountId, String);
       check(job && job.data && job.data.entryId, String);
       check(job && job.data && job.data.accessToken, String);
@@ -120,12 +126,13 @@ const EntriesJobs = {
           accessToken,
           entryId,
           campaignId,
-          likeDateEstimate
+          likeDateEstimate,
         });
       } catch (error) {
         errored = true;
         job.fail(error.message);
       } finally {
+        logger.info(`entries.updateEntryInteractions job finished: ${JSON.stringify(job)}`);
         if (!errored) {
           job.done();
           return job.remove();
@@ -135,75 +142,19 @@ const EntriesJobs = {
 
     workerOptions: {
       concurrency: 4,
-      pollInterval: 2500
+      pollInterval: 2500,
     },
 
     jobOptions({ jobData }) {
       const options = {
         retry: {
           retries: 3,
-          wait: 10 * 1000
-        }
+          wait: 10 * 1000,
+        },
       };
       return options;
-    }
+    },
   },
-  "entries.updatePeopleLikesCount": {
-    run({ job }) {
-      logger.debug("entries.updatePeopleLikesCount job:called");
-      check(job && job.data && job.data.campaignId, String);
-      check(job && job.data && job.data.facebookAccountId, String);
-      check(job && job.data && job.data.entryId, String);
-      const { campaignId, facebookAccountId, entryId } = job.data;
-      LikesHelpers.updatePeopleLikesCountByEntry({
-        campaignId,
-        facebookAccountId,
-        entryId
-      });
-      job.done();
-      return job.remove();
-    },
-    workerOptions: {
-      concurrency: 4,
-      pollInterval: 2500
-    },
-    jobOptions({ jobData }) {
-      return {
-        retry: {
-          retries: 4,
-          wait: 30 * 1000 // wait 30 seconds
-        }
-      };
-    }
-  },
-  "entries.updatePeopleCommentsCount": {
-    run({ job }) {
-      logger.debug("entries.updatePeopleCommentsCount job:called");
-      check(job && job.data && job.data.campaignId, String);
-      check(job && job.data && job.data.facebookAccountId, String);
-      check(job && job.data && job.data.entryId, String);
-      const { campaignId, facebookAccountId, entryId } = job.data;
-      CommentsHelpers.updatePeopleCommentsCountByEntry({
-        campaignId,
-        facebookAccountId,
-        entryId
-      });
-      job.done();
-      return job.remove();
-    },
-    workerOptions: {
-      concurrency: 4,
-      pollInterval: 2500
-    },
-    jobOptions({ jobData }) {
-      return {
-        retry: {
-          retries: 4,
-          wait: 30 * 1000 // wait 30 seconds
-        }
-      };
-    }
-  }
 };
 
 exports.EntriesJobs = EntriesJobs;

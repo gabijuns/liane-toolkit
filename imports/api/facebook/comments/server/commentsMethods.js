@@ -8,19 +8,26 @@ export const queryCount = new ValidatedMethod({
   name: "comments.queryCount",
   validate: new SimpleSchema({
     campaignId: {
-      type: String
+      type: String,
     },
     query: {
       type: Object,
-      blackbox: true
-    }
+      blackbox: true,
+    },
   }).validator(),
   run({ campaignId, facebookId, query }) {
     logger.debug("comments.queryCount", { campaignId });
 
     const userId = Meteor.userId();
 
-    if (!Meteor.call("campaigns.canManage", { campaignId, userId })) {
+    if (
+      !Meteor.call("campaigns.userCan", {
+        campaignId,
+        userId,
+        feature: "comments",
+        permission: "view",
+      })
+    ) {
       throw new Meteor.Error(401, "You are not allowed to do this action");
     }
 
@@ -35,23 +42,23 @@ export const queryCount = new ValidatedMethod({
     return Comments.find({
       ...query,
       facebookAccountId,
-      created_time: { $exists: true }
+      created_time: { $exists: true },
     }).count();
-  }
+  },
 });
 
 export const reactComment = new ValidatedMethod({
   name: "comments.react",
   validate: new SimpleSchema({
     campaignId: {
-      type: String
+      type: String,
     },
     commentId: {
-      type: String
+      type: String,
     },
     reaction: {
-      type: String
-    }
+      type: String,
+    },
   }).validator(),
   run({ campaignId, commentId, reaction }) {
     this.unblock();
@@ -59,7 +66,14 @@ export const reactComment = new ValidatedMethod({
 
     const userId = Meteor.userId();
 
-    if (!Meteor.call("campaigns.canManage", { campaignId, userId })) {
+    if (
+      !Meteor.call("campaigns.userCan", {
+        campaignId,
+        userId,
+        feature: "comments",
+        permission: "edit",
+      })
+    ) {
       throw new Meteor.Error(401, "You are not allowed to do this action");
     }
 
@@ -72,29 +86,36 @@ export const reactComment = new ValidatedMethod({
     ) {
       throw new Meteor.Error(400, "Not allowed");
     }
-  }
+  },
 });
 
 export const resolveComment = new ValidatedMethod({
   name: "comments.resolve",
   validate: new SimpleSchema({
     campaignId: {
-      type: String
+      type: String,
     },
     commentId: {
-      type: String
+      type: String,
     },
     resolve: {
       type: Boolean,
-      optional: true
-    }
+      optional: true,
+    },
   }).validator(),
   run({ campaignId, commentId, resolve }) {
     logger.debug("comments.resolve called", { campaignId, commentId, resolve });
 
     const userId = Meteor.userId();
 
-    if (!Meteor.call("campaigns.canManage", { campaignId, userId })) {
+    if (
+      !Meteor.call("campaigns.userCan", {
+        campaignId,
+        userId,
+        feature: "comments",
+        permission: "categorize",
+      })
+    ) {
       throw new Meteor.Error(401, "You are not allowed to do this action");
     }
 
@@ -108,37 +129,52 @@ export const resolveComment = new ValidatedMethod({
       throw new Meteor.Error(401, "Permission denied");
     }
 
-    return Comments.update(commentId, {
+    const res = Comments.update(commentId, {
       $set: {
-        resolved: typeof resolve != "undefined" ? resolve : true
-      }
+        resolved: typeof resolve != "undefined" ? resolve : true,
+      },
     });
-  }
+
+    Meteor.call("log", {
+      type: resolve ? "comments.resolve" : "comments.unresolve",
+      campaignId,
+      data: { commentId },
+    });
+
+    return res;
+  },
 });
 
 export const categorizeComment = new ValidatedMethod({
   name: "comments.updateCategories",
   validate: new SimpleSchema({
     campaignId: {
-      type: String
+      type: String,
     },
     commentId: {
-      type: String
+      type: String,
     },
     categories: {
-      type: Array
+      type: Array,
     },
     "categories.$": {
       type: String,
-      allowedValues: ["question", "vote"]
-    }
+      allowedValues: ["question", "vote"],
+    },
   }).validator(),
   run({ campaignId, commentId, categories }) {
     logger.debug("comments.updateCategories called", { commentId, categories });
 
     const userId = Meteor.userId();
 
-    if (!Meteor.call("campaigns.canManage", { campaignId, userId })) {
+    if (
+      !Meteor.call("campaigns.userCan", {
+        campaignId,
+        userId,
+        feature: "comments",
+        permission: "categorize",
+      })
+    ) {
       throw new Meteor.Error(401, "You are not allowed to do this action");
     }
 
@@ -154,24 +190,30 @@ export const categorizeComment = new ValidatedMethod({
 
     Comments.update(commentId, {
       $set: {
-        categories
-      }
+        categories,
+      },
     });
-  }
+
+    Meteor.call("log", {
+      type: "comments.tag",
+      campaignId,
+      data: { commentId, categories },
+    });
+  },
 });
 
 export const sendComment = new ValidatedMethod({
   name: "comments.send",
   validate: new SimpleSchema({
     campaignId: {
-      type: String
+      type: String,
     },
     objectId: {
-      type: String
+      type: String,
     },
     message: {
-      type: String
-    }
+      type: String,
+    },
   }).validator(),
   run({ campaignId, objectId, message }) {
     this.unblock();
@@ -179,7 +221,14 @@ export const sendComment = new ValidatedMethod({
 
     const userId = Meteor.userId();
 
-    if (!Meteor.call("campaigns.canManage", { campaignId, userId })) {
+    if (
+      !Meteor.call("campaigns.userCan", {
+        campaignId,
+        userId,
+        feature: "comments",
+        permission: "edit",
+      })
+    ) {
       throw new Meteor.Error(401, "You are not allowed to do this action");
     }
 
@@ -187,18 +236,46 @@ export const sendComment = new ValidatedMethod({
 
     const access_token = campaign.facebookAccount.accessToken;
 
-    try {
-      Promise.await(
-        FB.api(`${objectId}/comments`, "POST", {
-          message,
-          access_token
-        })
-      );
-    } catch (err) {
-      console.log(err);
-      throw new Meteor.Error(500, "Error trying to publish comment");
+    const comment = Comments.findOne({_id: objectId});
+    
+    switch (comment.source) {
+      case 'instagram':
+        try {
+          Promise.await(
+            FB.api(`${objectId}/replies`, "POST", {
+              message,
+              access_token,
+            })
+          );
+        } catch (err) {
+          console.log(err);
+          throw new Meteor.Error(500, "Error trying to publish comment");
+        }
+    
+        break;
+      default: //Facebook
+
+        try {
+          Promise.await(
+            FB.api(`${objectId}/comments`, "POST", {
+              message,
+              access_token,
+            })
+          );
+        } catch (err) {
+          console.log(err);
+          throw new Meteor.Error(500, "Error trying to publish comment");
+        }
+    
+        break;
     }
 
+    Meteor.call("log", {
+      type: "comments.reply",
+      campaignId,
+      data: { commentId: objectId },
+    });
+
     return;
-  }
+  },
 });

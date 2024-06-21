@@ -28,8 +28,13 @@ export const trackRouteEntry = context => {
   Meteor.setTimeout(() => {
     const connectionId = Meteor.connection._lastSessionId;
     const userId = Meteor.userId();
-    if (userId) {
-      Meteor.call("log", { type: "view", path: context.path });
+    const campaignId = Session.get("campaignId");
+    if (userId && campaignId) {
+      Meteor.call("log", {
+        type: "view",
+        path: context.path,
+        campaignId
+      });
     }
   }, 3000);
 };

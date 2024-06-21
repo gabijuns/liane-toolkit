@@ -6,7 +6,7 @@ import { FacebookAccounts } from "/imports/api/facebook/accounts/accounts.js";
 import {
   PeopleTags,
   PeopleLists,
-  PeopleExports
+  PeopleExports,
 } from "/imports/api/facebook/people/people.js";
 import { Geolocations } from "/imports/api/geolocations/geolocations.js";
 import { Jobs } from "/imports/api/jobs/jobs.js";
@@ -18,13 +18,16 @@ import AppLayout from "../layouts/AppLayout.jsx";
 
 const reactiveCampaignId = new ReactiveVar(false);
 const ready = new ReactiveVar(false);
+const invite = new ReactiveVar(false);
 
 const AppSubs = new SubsManager();
 
-export default withTracker(({ content }) => {
+export default withTracker((props) => {
   const campaignsHandle = AppSubs.subscribe("campaigns.byUser");
   const userHandle = AppSubs.subscribe("users.data");
   const notificationsHandle = AppSubs.subscribe("notifications.byUser");
+
+  const routeName = FlowRouter.getRouteName();
 
   const connected = Meteor.status().connected;
   const isLoggedIn = Meteor.userId() !== null;
@@ -38,13 +41,31 @@ export default withTracker(({ content }) => {
   if (connected && isLoggedIn && user) {
     campaigns = campaignsHandle.ready()
       ? Campaigns.find({
-          users: { $elemMatch: { userId: user._id } }
+          users: { $elemMatch: { userId: user._id } },
         }).fetch()
       : [];
 
     notifications = notificationsHandle.ready()
-      ? Notifications.find().fetch()
+      ? Notifications.find({}, { sort: { createdAt: -1 } }).fetch()
       : [];
+  }
+
+  // Handle invite param
+  invite.set(ClientStorage.get("invite") || false);
+  if (props.invite || invite.get()) {
+    Meteor.call(
+      "campaigns.validateInvite",
+      { invite: props.invite || invite.get() },
+      (err, inviteKey) => {
+        invite.set(!err && inviteKey ? inviteKey : false);
+        ClientStorage.set("invite", inviteKey);
+      }
+    );
+  }
+
+  if (props.campaignId) {
+    Session.set("campaignId", props.campaignId);
+    FlowRouter.setQueryParams({ campaignId: null });
   }
 
   const incomingCampaignId = Session.get("campaignId");
@@ -55,11 +76,15 @@ export default withTracker(({ content }) => {
   }
 
   let hasCampaign = false;
-  if (campaignsHandle.ready() && campaigns.length) {
+  if (
+    campaignsHandle.ready() &&
+    campaigns.length &&
+    routeName != "App.campaign.new"
+  ) {
     if (ClientStorage.has("campaign")) {
       hasCampaign = true;
       let currentCampaign = ClientStorage.get("campaign");
-      if (find(campaigns, c => currentCampaign == c._id)) {
+      if (find(campaigns, (c) => currentCampaign == c._id)) {
         Session.set("campaignId", currentCampaign);
         reactiveCampaignId.set(currentCampaign);
       } else {
@@ -83,15 +108,32 @@ export default withTracker(({ content }) => {
 
   let entriesJob;
   let runningEntriesJobs = [];
+  let facebookHealthJob;
 
   let importCount = 0;
   let exportCount = 0;
-  if (campaignId) {
+  if (campaignId && routeName != "App.campaign.new") {
     const currentCampaignOptions = {
-      transform: function(campaign) {
+      fields: {
+        name: 1,
+        type: 1,
+        users: 1,
+        country: 1,
+        facebookAccount: 1,
+        candidate: 1,
+        party: 1,
+        office: 1,
+        cause: 1,
+        creatorId: 1,
+        geolocationId: 1,
+        forms: 1,
+        createdAt: 1,
+        contact: 1,
+      },
+      transform: function (campaign) {
         let accountsMap = {};
         if (campaign.accounts) {
-          campaign.accounts.forEach(account => {
+          campaign.accounts.forEach((account) => {
             accountsMap[account.facebookId] = account;
           });
         }
@@ -100,63 +142,94 @@ export default withTracker(({ content }) => {
             campaign.facebookAccount;
         }
         FacebookAccounts.find({
-          facebookId: { $in: Object.keys(accountsMap) }
+          facebookId: { $in: Object.keys(accountsMap) },
         })
           .fetch()
-          .forEach(account => {
+          .forEach((account) => {
             accountsMap[account.facebookId] = {
               ...accountsMap[account.facebookId],
-              ...account
+              ...account,
             };
           });
-        campaign.accounts = Object.values(accountsMap);
+        const accounts = Object.values(accountsMap);
+        campaign.facebookAccount = {
+          ...campaign.facebookAccount,
+          ...accounts[0],
+        };
+        campaign.accounts = accounts;
         campaign.tags = PeopleTags.find({
-          campaignId: campaign._id
+          campaignId: campaign._id,
         }).fetch();
-        campaign.users = Meteor.users
+        const users = Meteor.users
           .find({
-            _id: { $in: map(campaign.users, "userId") }
+            _id: { $in: map(campaign.users, "userId") },
           })
           .fetch()
-          .map(user => {
-            user.campaign = campaign.users.find(u => u.userId == user._id);
+          .map((user) => {
+            user.campaign = campaign.users.find((u) => u.userId == user._id);
             return user;
           });
+        const invitedUsers = campaign.users.filter(
+          (u) => !u.userId && u.inviteId
+        );
+        campaign.users = [...users, ...invitedUsers];
         campaign.geolocation = Geolocations.findOne(campaign.geolocationId);
         return campaign;
-      }
+      },
     };
     const currentCampaignHandle = AppSubs.subscribe("campaigns.detail", {
-      campaignId
+      campaignId,
     });
     campaign = currentCampaignHandle.ready()
       ? Campaigns.findOne(campaignId, currentCampaignOptions)
       : null;
 
+    if (campaign) {
+      // Lists
+      lists = PeopleLists.find({ campaignId }).fetch();
+      // Set campaign country
+      ClientStorage.set("country", campaign.country);
+      // Set user permissions
+      const campaignUser = campaign.users.find((u) => u._id == Meteor.userId());
+      let isAdmin = false;
+      if (campaignUser.campaign.role) {
+        isAdmin = campaignUser.campaign.role == "admin";
+      } else if (campaign.creatorId == Meteor.userId()) {
+        isAdmin = true;
+      }
+      if (!campaign.type) campaign.type = "electoral";
+      ClientStorage.set("admin", isAdmin);
+      ClientStorage.set("permissions", campaignUser.campaign.permissions);
+      ClientStorage.set("campaignType", campaign.type);
+    }
+
     // Tags
     const tagsHandle = AppSubs.subscribe("people.tags", {
-      campaignId
+      campaignId,
     });
     tags = tagsHandle.ready() ? PeopleTags.find({ campaignId }).fetch() : [];
-
-    // Lists
-    if (campaign) {
-      lists = PeopleLists.find({ campaignId }).fetch();
-    }
 
     // Campaign jobs
     const jobsHandle = AppSubs.subscribe("jobs.byCampaign", { campaignId });
     if (jobsHandle.ready()) {
-      entriesJob = Jobs.findOne({ type: "entries.updateAccountEntries" });
+      entriesJob = Jobs.findOne({
+        "data.campaignId": campaign._id,
+        type: "entries.updateAccountEntries",
+      });
       runningEntriesJobs = Jobs.find({
+        "data.campaignId": campaign._id,
         type: "entries.updateEntryInteractions",
-        status: { $nin: ["failed"] }
+        status: { $nin: ["failed", "completed"] },
       }).fetch();
+      facebookHealthJob = Jobs.findOne({
+        "data.campaignId": campaign._id,
+        type: "campaigns.healthCheck",
+      });
     }
 
     // Import job count
     const importCountHandle = AppSubs.subscribe("people.importJobCount", {
-      campaignId
+      campaignId,
     });
     importCount = importCountHandle.ready()
       ? Counts.get("people.importJobCount")
@@ -164,7 +237,7 @@ export default withTracker(({ content }) => {
 
     // Import job count
     const exportCountHandle = AppSubs.subscribe("people.exportJobCount", {
-      campaignId
+      campaignId,
     });
     exportCount = exportCountHandle.ready()
       ? Counts.get("people.exportJobCount")
@@ -175,7 +248,7 @@ export default withTracker(({ content }) => {
     peopleExports = exportsHandle.ready()
       ? PeopleExports.find({ campaignId }).fetch()
       : [];
-    peopleExports = sortBy(peopleExports, item => -new Date(item.createdAt));
+    peopleExports = sortBy(peopleExports, (item) => -new Date(item.createdAt));
 
     ready.set(
       currentCampaignHandle.ready() &&
@@ -188,10 +261,14 @@ export default withTracker(({ content }) => {
 
   const loadingCampaigns = !campaignsHandle.ready();
 
+  // Refetch users for reactive behaviour
+  Meteor.users.find().fetch();
+
   return {
     user,
     connected,
     ready: ready.get(),
+    invite: invite.get(),
     isLoggedIn,
     notifications,
     loadingCampaigns,
@@ -202,10 +279,10 @@ export default withTracker(({ content }) => {
     lists,
     entriesJob,
     runningEntriesJobs,
+    facebookHealthJob,
     importCount,
     exportCount,
     peopleExports,
-    content: content,
-    routeName: FlowRouter.getRouteName()
+    routeName: FlowRouter.getRouteName(),
   };
 })(AppLayout);

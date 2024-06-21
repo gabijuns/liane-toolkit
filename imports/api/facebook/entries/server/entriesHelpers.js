@@ -36,7 +36,7 @@ const EntriesHelpers = {
   },
   upsertEntry({ facebookAccountId, data }) {
     const campaignWithToken = Campaigns.findOne({
-      "facebookAccount.facebookId": facebookAccountId
+      "facebookAccount.facebookId": facebookAccountId,
     });
     if (!campaignWithToken || !campaignWithToken.facebookAccount.accessToken) {
       throw new Meteor.Error(400, "Facebook account not available");
@@ -57,14 +57,16 @@ const EntriesHelpers = {
             "comments.limit(0).summary(true)",
             "reactions.limit(0).summary(true).as(reaction)",
             "reactions.type(LIKE).limit(0).summary(true).as(like)",
+            "reactions.type(CARE).limit(0).summary(true).as(care)",
+            "reactions.type(PRIDE).limit(0).summary(true).as(pride)",
             "reactions.type(LOVE).limit(0).summary(true).as(love)",
             "reactions.type(WOW).limit(0).summary(true).as(wow)",
             "reactions.type(HAHA).limit(0).summary(true).as(haha)",
             "reactions.type(SAD).limit(0).summary(true).as(sad)",
             "reactions.type(ANGRY).limit(0).summary(true).as(angry)",
-            "reactions.type(THANKFUL).limit(0).summary(true).as(thankful)"
+            "reactions.type(THANKFUL).limit(0).summary(true).as(thankful)",
           ],
-          access_token: campaignWithToken.facebookAccount.accessToken
+          access_token: campaignWithToken.facebookAccount.accessToken,
         })
       );
     } catch (error) {
@@ -73,25 +75,29 @@ const EntriesHelpers = {
 
     return Entries.upsert(
       {
-        _id: entry.id
+        _id: entry.id,
       },
       this.getUpdateObjFromFBData({ facebookAccountId, entry })
     );
   },
-  updateInteractionCount({ entryId }) {
-    const entry = Entries.findOne(entryId);
+  updateInteractionCount({ entryId, facebookAccountId }) {
+    let entry = Entries.findOne(entryId);
+    if (!entry) {
+      this.upsertEntry({ facebookAccountId, data: { post_id: entryId } });
+      entry = Entries.findOne(entryId);
+    }
     let counts = Object.assign({}, entry.counts || {});
     counts.comment = Comments.find({ entryId }).count();
     counts.reaction = Likes.find({
       entryId,
-      parentId: { $exists: false }
+      parentId: { $exists: false },
     }).count();
     const reactionTypes = LikesHelpers.getReactionTypes();
     for (const reactionType of reactionTypes) {
       counts[reactionType.toLowerCase()] = Likes.find({
         entryId,
         type: reactionType,
-        parentId: { $exists: false }
+        parentId: { $exists: false },
       }).count();
     }
     let $set = {};
@@ -108,52 +114,262 @@ const EntriesHelpers = {
     LikesHelpers.updatePeopleLikesCountByEntry({
       campaignId,
       facebookAccountId: facebookId,
-      entryId
+      entryId,
     });
     CommentsHelpers.updatePeopleCommentsCountByEntry({
       campaignId,
       facebookAccountId: facebookId,
-      entryId
+      entryId,
     });
   },
-  getUpdateObjFromFBData({ facebookAccountId, entry }) {
-    const counts = {
-      share: entry.shares ? entry.shares.count : 0,
-      like: entry.like ? entry.like.summary.total_count : 0,
-      love: entry.love ? entry.love.summary.total_count : 0,
-      wow: entry.wow ? entry.wow.summary.total_count : 0,
-      haha: entry.haha ? entry.haha.summary.total_count : 0,
-      sad: entry.sad ? entry.sad.summary.total_count : 0,
-      angry: entry.angry ? entry.angry.summary.total_count : 0,
-      thankful: entry.thankful ? entry.thankful.summary.total_count : 0,
-      reaction: entry.reaction ? entry.reaction.summary.total_count : 0,
-      comment: entry.comments ? entry.comments.summary.total_count : 0
-    };
+  getUpdateObjFromFBData({ facebookAccountId, entry, source }) {
+    let entry_source;
+    let entry_message;
+    let entry_createdTime;
+    let entry_updatedTime;
+    let entry_parentId;
+    let source_data;
+    let counts;
+
+    switch (source) {
+      case "instagram":
+        counts = {
+          share: 0,
+          like: entry.like_count ? entry.like_count : 0,
+          care: 0,
+          love: 0,
+          wow: 0,
+          haha: 0,
+          sad: 0,
+          angry: 0,
+          thankful: 0,
+          reaction: entry.like_count ? entry.like_count : 0,
+          comment: entry.comments_count ? entry.comments_count : 0,
+        };
+
+        entry_source = source;
+        entry_message = entry.caption;
+        entry_createdTime = entry.timestamp; // To DO: Verify if entry already exists and keep its original date;
+        entry_updatedTime = entry.timestamp;
+        entry_parentId = entry.owner.id;
+        source_data = {
+          ig_id: entry.ig_id,
+          media_type: entry.media_type,
+          media_url: entry.media_url,
+          permalink: entry.permalink,
+          username: entry.username,
+          is_comment_enabled: entry.is_comment_enabled,
+        };
+        break;
+      default:
+        // Facebook
+        counts = {
+          share: entry.shares ? entry.shares.count : 0,
+          like: entry.like ? entry.like.summary.total_count : 0,
+          care: entry.care ? entry.care.summary.total_count : 0,
+          love: entry.love ? entry.love.summary.total_count : 0,
+          wow: entry.wow ? entry.wow.summary.total_count : 0,
+          haha: entry.haha ? entry.haha.summary.total_count : 0,
+          sad: entry.sad ? entry.sad.summary.total_count : 0,
+          angry: entry.angry ? entry.angry.summary.total_count : 0,
+          thankful: entry.thankful ? entry.thankful.summary.total_count : 0,
+          reaction: entry.reaction ? entry.reaction.summary.total_count : 0,
+          comment: entry.comments ? entry.comments.summary.total_count : 0,
+        };
+
+        entry_source = "facebook";
+        entry_message = entry.message;
+        entry_createdTime = entry.created_time;
+        entry_updatedTime = entry.updated_time;
+        entry_parentId = entry.parent_id;
+        source_data = null;
+        break;
+    }
+
     return {
       $setOnInsert: {
         _id: entry.id,
+        source: entry_source,
         facebookAccountId,
-        createdTime: entry.created_time
+        createdTime: entry_createdTime,
       },
       $set: {
-        message: entry.message,
-        parentId: entry.parent_id,
-        updatedTime: entry.updated_time,
-        counts
+        message: entry_message,
+        parentId: entry_parentId,
+        updatedTime: entry_updatedTime,
+        counts,
+        source_data,
+      },
+    };
+  },
+  updateInstagramAccountEntries({
+    facebookId,
+    instagramId,
+    accessToken,
+    forceUpdate,
+    campaignId,
+    likeDateEstimate,
+  }) {
+    check(facebookId, String);
+    check(instagramId, String);
+    check(accessToken, String);
+    check(forceUpdate, Boolean);
+    check(campaignId, String);
+
+    logger.debug("EntriesHelpers.updateInstagramAccountEntries called", {
+      facebookId,
+      instagramId,
+    });
+
+    const _insertWithInteractions = ({ data }) => {
+      for (const entry of data) {
+        const currentEntry = Entries.findOne(entry.id);
+        const updateObj = this.getUpdateObjFromFBData({
+          facebookAccountId: facebookId,
+          entry,
+          source: "instagram",
+        });
+        const vals = updateObj.$set;
+        let updateInteractions = [];
+        if (currentEntry) {
+          if (
+            vals.counts.comment &&
+            (currentEntry.counts.comment !== vals.counts.comment || forceUpdate)
+          ) {
+            updateInteractions.push("comments");
+          }
+          if (
+            vals.counts.reaction &&
+            (currentEntry.counts.reaction !== vals.counts.reaction ||
+              forceUpdate)
+          ) {
+            updateInteractions.push("likes");
+          }
+        } else {
+          if (vals.counts.reaction) updateInteractions.push("likes");
+          if (vals.counts.comment) updateInteractions.push("comments");
+        }
+
+        Entries.upsert(
+          {
+            _id: entry.id,
+          },
+          updateObj
+        );
+        if (updateInteractions.length) {
+          logger.debug(
+            "EntriesHelpers.updateInstagramAccountEntries need to update interactions",
+            {
+              entry: entry.caption,
+              updateInteractions,
+            }
+          );
+
+          JobsHelpers.addJob({
+            jobType: "entries.updateEntryInteractions",
+            jobData: {
+              likeDateEstimate,
+              interactionTypes: updateInteractions,
+              facebookAccountId: facebookId,
+              accessToken: accessToken,
+              entryId: entry.id,
+              campaignId: campaignId,
+            },
+          });
+        }
       }
     };
+
+    let response;
+    let fields = [
+      "caption",
+      "comments_count",
+      "id",
+      "owner",
+      "like_count",
+      "media_type",
+      "media_url",
+      "permalink",
+      "thumbnail_url",
+      "timestamp",
+      "is_comment_enabled",
+    ];
+
+    // First we search for "media"
+    try {
+      response = Promise.await(
+        FB.api(`${instagramId}/media`, {
+          fields,
+          limit: 100,
+          access_token: accessToken,
+        })
+      );
+    } catch (error) {
+      throw new Meteor.Error(error);
+    }
+
+    if (response.data.length) {
+      _insertWithInteractions({ data: response.data });
+      let next = response.paging.next;
+      while (next !== undefined) {
+        let nextPage = _fetchFacebookPageData({ url: next });
+        next = nextPage.data.paging ? nextPage.data.paging.next : undefined;
+        if (nextPage.statusCode == 200 && nextPage.data.data.length) {
+          _insertWithInteractions({ data: nextPage.data.data });
+        }
+      }
+    }
+
+    // fields = [
+    //   "caption",
+    //   "comments_count",
+    //   "id",
+    //   "owner",
+    //   "like_count",
+    //   "media_type",
+    //   "media_url",
+    //   "permalink",
+    //   "thumbnail_url",
+    //   "timestamp",
+    // ];
+    // // Then we search for "stories"
+    // try {
+    //   response = Promise.await(
+    //     FB.api(`${instagramId}/stories`, {
+    //       fields,
+    //       limit: 100,
+    //       access_token: accessToken,
+    //     })
+    //   );
+    // } catch (error) {
+    //   throw new Meteor.Error(error);
+    // }
+    //
+    // if (response.data.length) {
+    //   _insertWithInteractions({ data: response.data });
+    //   let next = response.paging.next;
+    //   while (next !== undefined) {
+    //     let nextPage = _fetchFacebookPageData({ url: next });
+    //     next = nextPage.data.paging ? nextPage.data.paging.next : undefined;
+    //     if (nextPage.statusCode == 200 && nextPage.data.data.length) {
+    //       _insertWithInteractions({ data: nextPage.data.data });
+    //     }
+    //   }
+    // }
+
+    return;
   },
   updateAccountEntries({
     campaignId,
     facebookId,
     likeDateEstimate,
-    forceUpdate
+    forceUpdate,
   }) {
     check(campaignId, String);
     check(facebookId, String);
     check(forceUpdate, Boolean);
 
-    CampaignsHelpers.refreshCampaignAccountsTokens({ campaignId });
+    CampaignsHelpers.refreshCampaignAccountToken({ campaignId });
 
     let campaign;
     let isCampaignAccount = false;
@@ -165,11 +381,22 @@ const EntriesHelpers = {
 
     const accessToken = campaign.facebookAccount.accessToken;
 
-    const accountPath = isCampaignAccount ? "me" : facebookId;
-
-    logger.debug("EntriesHelpers.updateAccountEntries called", {
-      facebookId
+    // If configured, we first update instagram entries
+    const facebookAccount = FacebookAccountsHelpers.getFacebookAccount({
+      facebookId,
     });
+    if (facebookAccount.instagramBusinessAccountId) {
+      this.updateInstagramAccountEntries({
+        facebookId,
+        instagramId: facebookAccount.instagramBusinessAccountId,
+        accessToken: accessToken,
+        forceUpdate,
+        campaignId,
+        likeDateEstimate,
+      });
+    }
+
+    const accountPath = isCampaignAccount ? "me" : facebookId;
 
     let response;
     try {
@@ -184,15 +411,17 @@ const EntriesHelpers = {
             "comments.limit(0).summary(true)",
             "reactions.limit(0).summary(true).as(reaction)",
             "reactions.type(LIKE).limit(0).summary(true).as(like)",
+            "reactions.type(CARE).limit(0).summary(true).as(care)",
+            "reactions.type(PRIDE).limit(0).summary(true).as(pride)",
             "reactions.type(LOVE).limit(0).summary(true).as(love)",
             "reactions.type(WOW).limit(0).summary(true).as(wow)",
             "reactions.type(HAHA).limit(0).summary(true).as(haha)",
             "reactions.type(SAD).limit(0).summary(true).as(sad)",
             "reactions.type(ANGRY).limit(0).summary(true).as(angry)",
-            "reactions.type(THANKFUL).limit(0).summary(true).as(thankful)"
+            "reactions.type(THANKFUL).limit(0).summary(true).as(thankful)",
           ],
           limit: 100,
-          access_token: accessToken
+          access_token: accessToken,
         })
       );
     } catch (error) {
@@ -201,10 +430,11 @@ const EntriesHelpers = {
 
     const _insertWithInteractions = ({ data }) => {
       for (const entry of data) {
+        logger.debug("entriesHelpers.updateAccountEntries._insertWithInteractions:", entry);
         const currentEntry = Entries.findOne(entry.id);
         const updateObj = this.getUpdateObjFromFBData({
           facebookAccountId: facebookId,
-          entry
+          entry,
         });
         const vals = updateObj.$set;
         let updateInteractions = [];
@@ -228,7 +458,7 @@ const EntriesHelpers = {
         }
         Entries.upsert(
           {
-            _id: entry.id
+            _id: entry.id,
           },
           updateObj
         );
@@ -241,8 +471,8 @@ const EntriesHelpers = {
               facebookAccountId: facebookId,
               accessToken: accessToken,
               entryId: entry.id,
-              campaignId: campaignId
-            }
+              campaignId: campaignId,
+            },
           });
         }
       }
@@ -251,15 +481,16 @@ const EntriesHelpers = {
     const _insertBulk = ({ data }) => {
       const bulk = Entries.rawCollection().initializeUnorderedBulkOp();
       for (const entry of data) {
+        logger.debug("entriesHelpers.updateAccountEntries._insertBulk:", entry);
         bulk
           .find({
-            _id: entry.id
+            _id: entry.id,
           })
           .upsert()
           .update(
             this.getUpdateObjFromFBData({
               facebookAccountId: facebookId,
-              entry
+              entry,
             })
           );
       }
@@ -298,7 +529,7 @@ const EntriesHelpers = {
     facebookAccountId,
     entryId,
     accessToken,
-    likeDateEstimate
+    likeDateEstimate,
   }) {
     check(campaignId, String);
     check(facebookAccountId, String);
@@ -310,7 +541,7 @@ const EntriesHelpers = {
 
     logger.debug("EntriesHelpers.updateEntryInteractions called", {
       interactionTypes,
-      entryId
+      entryId,
     });
 
     if (interactionTypes.indexOf("comments") !== -1) {
@@ -318,7 +549,7 @@ const EntriesHelpers = {
         facebookAccountId,
         entryId,
         accessToken,
-        campaignId
+        campaignId,
       });
     }
     if (interactionTypes.indexOf("likes") !== -1) {
@@ -326,10 +557,20 @@ const EntriesHelpers = {
         facebookAccountId,
         entryId,
         accessToken,
-        likeDateEstimate
+        likeDateEstimate,
       });
     }
-  }
+  },
+  getEntrySource({ entryId }) {
+    check(entryId, String);
+    let entry = Entries.findOne(entryId);
+    return entry.source;
+  },
+  getEntryData({ entryId }) {
+    check(entryId, String);
+    let entry = Entries.findOne(entryId);
+    return entry;
+  },
 };
 
 exports.EntriesHelpers = EntriesHelpers;

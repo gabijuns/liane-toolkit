@@ -1,9 +1,54 @@
 import React, { Component } from "react";
+import {
+  injectIntl,
+  intlShape,
+  defineMessages,
+  FormattedMessage,
+} from "react-intl";
 import styled, { css } from "styled-components";
 import { CountryDropdown, RegionDropdown } from "react-country-region-selector";
 import CountrySelect from "./CountrySelect.jsx";
 import RegionSelect from "./RegionSelect.jsx";
 import Form from "./Form.jsx";
+
+const messages = defineMessages({
+  countryLabel: {
+    id: "app.address.country.label",
+    defaultMessage: "Country",
+  },
+  zipcodeLabel: {
+    id: "app.address.zipcode.label",
+    defaultMessage: "Zipcode",
+  },
+  zipcodePlaceholder: {
+    id: "app.address.zipcode.placeholder",
+    defaultMessage: "Type a zipcode",
+  },
+  regionLabel: {
+    id: "app.address.region.label",
+    defaultMessage: "Region",
+  },
+  cityLabel: {
+    id: "app.address.city.label",
+    defaultMessage: "City",
+  },
+  neighbourhoodLabel: {
+    id: "app.address.neighbourhood.label",
+    defaultMessage: "Neighbourhood",
+  },
+  streetAddressLabel: {
+    id: "app.address.street_address.label",
+    defaultMessage: "Street address",
+  },
+  numberLabel: {
+    id: "app.address.number.label",
+    defaultMessage: "Number",
+  },
+  complementLabel: {
+    id: "app.address.complement.label",
+    defaultMessage: "Complement",
+  },
+});
 
 const Container = styled.div``;
 
@@ -19,18 +64,27 @@ const Group = styled.div`
       flex: 2 1 0;
     }
   }
-  ${props =>
+  ${(props) =>
     props.secondary &&
     css`
       font-size: 0.9em;
     `}
+  @media (max-width: 620px) {
+    padding: 1rem;
+    flex-wrap: wrap;
+    > label {
+      flex: 1 1 100%;
+      margin-left: 0;
+      margin-right: 0;
+    }
+  }
 `;
 
-export default class AddressField extends Component {
+class AddressField extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      formData: {}
+      formData: {},
     };
   }
   componentDidMount() {
@@ -39,7 +93,7 @@ export default class AddressField extends Component {
     if (value) {
       formData = {
         ...formData,
-        ...value
+        ...value,
       };
     }
     if (value) {
@@ -64,7 +118,7 @@ export default class AddressField extends Component {
       "people.resolveZipcode",
       {
         country,
-        zipcode
+        zipcode,
       },
       (err, res) => {
         if (res) {
@@ -74,8 +128,8 @@ export default class AddressField extends Component {
               region: res.state,
               city: res.city,
               neighbourhood: res.neighborhood,
-              street: res.street
-            }
+              street: res.street,
+            },
           });
         }
       }
@@ -88,8 +142,8 @@ export default class AddressField extends Component {
     this.setState({
       formData: {
         ...formData,
-        zipcode
-      }
+        zipcode,
+      },
     });
     this._updateFromZipcodeData(formData.country || country, zipcode);
   };
@@ -97,30 +151,30 @@ export default class AddressField extends Component {
     this.setState({
       formData: {
         ...this.state.formData,
-        [target.name]: target.value
-      }
+        [target.name]: target.value,
+      },
     });
   };
   render() {
-    const { country } = this.props;
+    const { intl, country } = this.props;
     const { formData } = this.state;
     return (
       <Container>
         <Group>
-          <Form.Field label="Country">
+          <Form.Field label={intl.formatMessage(messages.countryLabel)}>
             <CountrySelect
-              label="Country"
+              label={intl.formatMessage(messages.countryLabel)}
               value={formData.country || country}
               name="country"
               onChange={this._handleChange}
             />
           </Form.Field>
           {formData.country || country ? (
-            <Form.Field label="Zipcode">
+            <Form.Field label={intl.formatMessage(messages.zipcodeLabel)}>
               <input
                 type="text"
                 name="zipcode"
-                placeholder="Type a zipcode"
+                placeholder={intl.formatMessage(messages.zipcodePlaceholder)}
                 value={formData.zipcode}
                 onChange={this._handleZipcodeChange}
               />
@@ -130,7 +184,7 @@ export default class AddressField extends Component {
         {formData.country || country ? (
           <>
             <Group secondary>
-              <Form.Field label="Region">
+              <Form.Field label={intl.formatMessage(messages.regionLabel)}>
                 <RegionSelect
                   country={formData.country || country}
                   name="region"
@@ -138,7 +192,7 @@ export default class AddressField extends Component {
                   value={formData.region}
                 />
               </Form.Field>
-              <Form.Field label="City">
+              <Form.Field label={intl.formatMessage(messages.cityLabel)}>
                 <input
                   type="text"
                   name="city"
@@ -146,7 +200,9 @@ export default class AddressField extends Component {
                   onChange={this._handleChange}
                 />
               </Form.Field>
-              <Form.Field label="Neighbourhood">
+              <Form.Field
+                label={intl.formatMessage(messages.neighbourhoodLabel)}
+              >
                 <input
                   type="text"
                   name="neighbourhood"
@@ -156,7 +212,10 @@ export default class AddressField extends Component {
               </Form.Field>
             </Group>
             <Group secondary>
-              <Form.Field label="Street address" className="grow">
+              <Form.Field
+                label={intl.formatMessage(messages.streetAddressLabel)}
+                className="grow"
+              >
                 <input
                   type="text"
                   name="street"
@@ -164,7 +223,7 @@ export default class AddressField extends Component {
                   onChange={this._handleChange}
                 />
               </Form.Field>
-              <Form.Field label="Number">
+              <Form.Field label={intl.formatMessage(messages.numberLabel)}>
                 <input
                   type="text"
                   name="number"
@@ -172,7 +231,7 @@ export default class AddressField extends Component {
                   onChange={this._handleChange}
                 />
               </Form.Field>
-              <Form.Field label="Complement">
+              <Form.Field label={intl.formatMessage(messages.complementLabel)}>
                 <input
                   type="text"
                   name="complement"
@@ -187,3 +246,9 @@ export default class AddressField extends Component {
     );
   }
 }
+
+AddressField.propTypes = {
+  intl: intlShape.isRequired,
+};
+
+export default injectIntl(AddressField);

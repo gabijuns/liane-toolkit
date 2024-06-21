@@ -1,5 +1,7 @@
 import { Promise } from "meteor/promise";
-const { CampaignsHelpers } = require("./campaignsHelpers.js");
+import { Campaigns } from "../campaigns.js";
+import { CampaignsHelpers } from "./campaignsHelpers.js";
+import { FacebookAccountsHelpers } from "/imports/api/facebook/accounts/server/accountsHelpers.js";
 
 const CampaignsJobs = {
   "campaigns.healthCheck": {
@@ -9,13 +11,20 @@ const CampaignsJobs = {
 
       const campaignId = job.data.campaignId;
 
+      const campaign = Campaigns.findOne(campaignId);
+
       let errored = false;
       try {
-        CampaignsHelpers.refreshCampaignAccountsTokens({
-          campaignId
+        CampaignsHelpers.refreshCampaignAccountToken({
+          campaignId,
+        });
+        FacebookAccountsHelpers.updateFBSubscription({
+          facebookAccountId: campaign.facebookAccount.facebookId,
+          token: campaign.facebookAccount.accessToken,
         });
       } catch (error) {
         errored = true;
+        CampaignsHelpers.disconnectAccount({ campaignId });
         return job.fail(error.message);
       } finally {
         if (!errored) {
@@ -27,23 +36,23 @@ const CampaignsJobs = {
 
     workerOptions: {
       concurrency: 2,
-      pollInterval: 2500
+      pollInterval: 2500,
     },
 
     jobOptions() {
       const options = {
         retry: {
-          retries: 3,
-          wait: 5 * 60 * 1000
+          retries: 1,
+          wait: 5 * 60 * 1000,
         },
         repeat: {
-          wait: 2 * 60 * 60 * 1000
+          wait: 2 * 60 * 60 * 1000,
           // schedule: "0 0 12 * * *"
-        }
+        },
       };
       return options;
-    }
-  }
+    },
+  },
 };
 
 exports.CampaignsJobs = CampaignsJobs;

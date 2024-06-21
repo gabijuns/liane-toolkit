@@ -17,16 +17,17 @@ const NavContainer = styled.div`
   flex: 0 0 auto;
   box-sizing: border-box;
   border-right: 1px solid #ccc;
-  overflow: auto;
   background: #f7f7f7;
-  ${props =>
+  position: relative;
+  z-index: 10;
+  ${(props) =>
     !props.plain &&
     css`
       padding: 2rem 0 2rem 2rem;
     `}
   h3 {
     color: #999;
-    font-size: 1.75em;
+    font-size: 1.2em;
     font-weight: normal;
     margin: 1rem 0 1rem 0;
     padding-top: 1rem;
@@ -77,7 +78,12 @@ const NavContainer = styled.div`
       margin-bottom: 1rem;
     }
   }
-  ${props =>
+  ${(props) =>
+    props.padded &&
+    css`
+      padding-right: 1rem;
+    `}
+  ${(props) =>
     !props.full &&
     css`
       @media (min-width: 1280px) {
@@ -87,14 +93,14 @@ const NavContainer = styled.div`
         bottom: 0;
       }
     `}
-  ${props =>
+  ${(props) =>
     props.large &&
     css`
       .nav-content {
         max-width: 400px;
       }
     `}
-  ${props =>
+  ${(props) =>
     props.padded &&
     css`
       .nav-content {
@@ -127,16 +133,16 @@ class Nav extends Component {
 
 const ContentContainer = styled.div`
   flex: 1 1 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  ${props =>
+  ${"" /* overflow-x: hidden;
+  overflow-y: auto; */}
+  ${(props) =>
     props.full &&
     css`
       .content-body {
         max-width: none;
       }
     `}
-  ${props =>
+  ${(props) =>
     props.compact &&
     css`
       .content-body {
@@ -144,10 +150,18 @@ const ContentContainer = styled.div`
         padding: 0;
       }
     `}
+  ${(props) =>
+    props.plain &&
+    css`
+      .content-body {
+        margin-left: auto;
+        margin-right: auto;
+      }
+    `}
 `;
 
 const ContentBody = styled.div`
-  max-width: 640px;
+  max-width: 700px;
   margin: 3rem 0;
   padding: 0 3rem;
   @media (min-width: 1280px) {
@@ -167,27 +181,60 @@ class Content extends Component {
 }
 
 const Container = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
+  ${"" /* position: fixed; */}
+  ${"" /* top: 0;
+  left: 0; */}
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
+  ${"" /* overflow: auto; */}
 `;
 
 const PageBody = styled.div`
   flex: 1 1 100%;
-  overflow: auto;
   display: flex;
   flex-direction: row;
   position: relative;
   z-index: 1;
   outline: none;
+  margin-top: 62px;
+  ${(props) =>
+    props.contained &&
+    css`
+      overflow: auto;
+    `}
+`;
+
+const Boxed = styled.div`
+  width: 100%;
+  max-width: 700px;
+  margin: 3rem auto 2rem;
+  padding: 2rem;
+  border-radius: 7px;
+  border: 1px solid #ddd;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  ${"" /* overflow: auto; */}
+  box-sizing: border-box;
+  .info {
+    flex: 1 1 100%;
+    margin: 0 0 1rem;
+  }
+  h2 {
+    font-family: "Open sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    margin: 0 0 2rem;
+  }
+  .button {
+    display: block;
+    margin: 0;
+  }
 `;
 
 const Title = styled.h1`
-  font-size: 3em;
+  font-size: 2em;
   margin: 3rem 0;
 `;
 
@@ -195,6 +242,7 @@ export default class Page extends Component {
   static Nav = Nav;
   static Content = Content;
   static Title = Title;
+  static Boxed = Boxed;
   componentDidMount() {
     document.getElementById("main").focus();
   }
@@ -204,6 +252,7 @@ export default class Page extends Component {
       campaign,
       notifications,
       children,
+      contained,
       ...props
     } = this.props;
     return (
@@ -213,7 +262,7 @@ export default class Page extends Component {
           campaign={campaign}
           notifications={notifications || []}
         />
-        <PageBody id="main" tabIndex="-1">
+        <PageBody contained={contained} id="main" tabIndex="-1">
           {children}
         </PageBody>
         <Footer />

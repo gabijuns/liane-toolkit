@@ -20,6 +20,8 @@ import {
 import L from "leaflet";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
+import { userCan } from "/imports/ui2/utils/permissions";
+
 import { alertStore } from "../containers/Alerts.jsx";
 
 import EditControl from "../components/EditControl.jsx";
@@ -30,6 +32,8 @@ import Button from "../components/Button.jsx";
 import ColorSelector from "../components/ColorSelector.jsx";
 
 import PeopleMapLayer from "../components/PeopleMapLayer.jsx";
+
+import MapLayerSelect from "../components/MapLayerSelect.jsx";
 
 const imagePath = "/";
 L.Icon.Default.imagePath = imagePath;
@@ -50,6 +54,14 @@ const messages = defineMessages({
   formDescription: {
     id: "app.forms.description",
     defaultMessage: "Description"
+  },
+  formMapLayerLabel: {
+    id: "app.map.layer_select_label",
+    defaultMessage: "Select or create a map layer"
+  },
+  formMapLayerReadLabel: {
+    id: "app.map.layer_read_label",
+    defaultMessage: "Layer"
   },
   formSave: {
     id: "app.forms.save",
@@ -95,6 +107,9 @@ const Container = styled.div`
     textarea {
       width: 100%;
     }
+    .color-selector {
+      margin: 0 0 1rem;
+    }
     .close {
       position: absolute;
       top: 1rem;
@@ -107,7 +122,6 @@ const Container = styled.div`
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-top: 1rem;
       .delete {
         display: block;
         font-size: 0.8em;
@@ -273,7 +287,7 @@ const LayerFilter = styled.ul`
   padding: 0;
   list-style: none;
   font-size: 0.8em;
-  li {
+  > li {
     background: #fff;
     border-bottom: 1px solid #ddd;
     padding: 0.75rem 1rem;
@@ -290,6 +304,10 @@ const LayerFilter = styled.ul`
     }
     svg {
       margin: 0 1rem 0 0;
+      flex: 0 0 auto;
+    }
+    .filter-main-content {
+      flex: 1 1 auto;
     }
     &:hover {
       background: #f0f0f0;
@@ -297,7 +315,7 @@ const LayerFilter = styled.ul`
     &.disabled {
       color: #999;
     }
-    span {
+    span.filter-title {
       font-weight: 600;
     }
     span.description {
@@ -306,6 +324,51 @@ const LayerFilter = styled.ul`
       font-style: italic;
       color: #666;
       display: block;
+    }
+  }
+  li.map-layers-filter {
+    display: block;
+    .map-layers-list {
+      margin: -0.75rem -1rem;
+      padding: 0;
+      width: auto;
+      display: block;
+      &.has-filter {
+        li {
+          color: #999;
+          svg {
+            color: #999;
+          }
+          &.active {
+            svg {
+              color: green;
+            }
+            color: #000;
+          }
+        }
+      }
+      li {
+        background: #fff;
+        margin: 0;
+        padding: 0.75rem 1rem 0.75rem 2.5rem;
+        border-bottom: 1px solid #ddd;
+        display: flex;
+        align-items: center;
+        svg {
+          color: #ccc;
+        }
+        h4 {
+          margin: 0;
+          font-weight: normal;
+        }
+        &:last-child {
+          border-bottom: 0;
+          border-radius: 0 0 7px 7px;
+        }
+        &:hover {
+          background: #f0f0f0;
+        }
+      }
     }
   }
 `;
@@ -327,6 +390,7 @@ class MapPage extends Component {
     this.state = {
       loading: false,
       formData: {},
+      featureLayers: [],
       layers: {
         people: true,
         custom: true
@@ -354,7 +418,7 @@ class MapPage extends Component {
   }
   componentDidUpdate(prevProps, prevState) {
     const { mapFeatures } = this.props;
-    const { formData, featureId, layers } = this.state;
+    const { formData, featureId, layers, featureLayers } = this.state;
     if (JSON.stringify(mapFeatures) != JSON.stringify(prevProps.mapFeatures)) {
       this._renderFeatures();
     }
@@ -362,6 +426,9 @@ class MapPage extends Component {
       this._renderFeatures();
     }
     if (layers.custom != prevState.layers.custom) {
+      this._renderFeatures();
+    }
+    if (prevState.featureLayers != featureLayers) {
       this._renderFeatures();
     }
     if (formData.color && prevState.formData.color != formData.color) {
@@ -525,7 +592,7 @@ class MapPage extends Component {
     );
   };
   _renderFeatures = () => {
-    const { layers } = this.state;
+    const { featureLayers, layers } = this.state;
     if (this.refs.featureGroup) {
       const layerGroup = this.refs.featureGroup.leafletElement;
       layerGroup.clearLayers();
@@ -559,7 +626,12 @@ class MapPage extends Component {
             formData: {}
           });
         });
-        layerGroup.addLayer(layer);
+        if (
+          !featureLayers.length ||
+          featureLayers.indexOf(properties.mapLayerId) !== -1 ||
+          !properties.mapLayerId
+        )
+          layerGroup.addLayer(layer);
       });
     }
   };
@@ -594,6 +666,19 @@ class MapPage extends Component {
       }
     });
   };
+  _handleFeatureLayerClick = mapLayer => ev => {
+    ev.preventDefault();
+    const { featureLayers } = this.state;
+    if (featureLayers.indexOf(mapLayer._id) == -1) {
+      this.setState({
+        featureLayers: [...featureLayers, mapLayer._id]
+      });
+    } else {
+      this.setState({
+        featureLayers: [...featureLayers].filter(l => l != mapLayer._id)
+      });
+    }
+  };
   _handlePeopleMouseOver = person => {
     this.setState({
       hoveringPerson: person
@@ -613,9 +698,10 @@ class MapPage extends Component {
     }
   };
   render() {
-    const { intl, mapFeatures, people } = this.props;
+    const { intl, mapFeatures, mapLayers, people } = this.props;
     const {
       loading,
+      featureLayers,
       layers,
       map,
       featureId,
@@ -633,7 +719,7 @@ class MapPage extends Component {
     return (
       <Container>
         {loading ? <Loading full /> : null}
-        <MapNav attached={!map}>
+        {/* <MapNav attached={!map}>
           <span className="nav-content">
             <a
               href="javascript:void(0);"
@@ -655,7 +741,7 @@ class MapPage extends Component {
               <FormattedMessage id="app.map.nav.map" defaultMessage="Map" />
             </a>
           </span>
-        </MapNav>
+        </MapNav> */}
         {map ? (
           <>
             <Map ref="map" center={[0, 0]} zoom={2} scrollWheelZoom={true}>
@@ -665,19 +751,21 @@ class MapPage extends Component {
                 opacity={0.75}
               />
               <FeatureGroup ref="featureGroup">
-                <EditControl
-                  position="bottomright"
-                  onMounted={this._handleMount}
-                  onEdited={this._handleFeatureEdit}
-                  onCreated={this._handleFeatureCreate}
-                  draw={{
-                    rectangle: false,
-                    circle: false,
-                    circlemarker: false
-                  }}
-                  edit={{ remove: false }}
-                  addOnCreate={false}
-                />
+                {userCan("edit", "map") ? (
+                  <EditControl
+                    position="bottomright"
+                    onMounted={this._handleMount}
+                    onEdited={this._handleFeatureEdit}
+                    onCreated={this._handleFeatureCreate}
+                    draw={{
+                      rectangle: false,
+                      circle: false,
+                      circlemarker: false
+                    }}
+                    edit={{ remove: false }}
+                    addOnCreate={false}
+                  />
+                ) : null}
               </FeatureGroup>
               {layers.people ? (
                 <PeopleMapLayer
@@ -726,11 +814,13 @@ class MapPage extends Component {
                     className={!layers.people ? "disabled" : ""}
                   >
                     <FontAwesomeIcon icon="user-circle" />
-                    <span>
-                      <FormattedMessage
-                        id="app.map.filters.people.title"
-                        defaultMessage="People"
-                      />
+                    <span className="filter-main-content">
+                      <span className="filter-title">
+                        <FormattedMessage
+                          id="app.map.filters.people.title"
+                          defaultMessage="People"
+                        />
+                      </span>
                       <span className="description">
                         <FormattedMessage
                           id="app.map.filters.people.description"
@@ -745,11 +835,13 @@ class MapPage extends Component {
                     className={!layers.custom ? "disabled" : ""}
                   >
                     <FontAwesomeIcon icon="map-marker" />
-                    <span>
-                      <FormattedMessage
-                        id="app.map.filters.custom.title"
-                        defaultMessage="Campaign additions"
-                      />
+                    <span className="filter-main-content">
+                      <span className="filter-title">
+                        <FormattedMessage
+                          id="app.map.filters.custom.title"
+                          defaultMessage="Campaign additions"
+                        />
+                      </span>
                       <span className="description">
                         <FormattedMessage
                           id="app.map.filters.custom.description"
@@ -758,6 +850,36 @@ class MapPage extends Component {
                       </span>
                     </span>
                   </li>
+                  {mapLayers && mapLayers.length ? (
+                    <li className="map-layers-filter">
+                      <ul
+                        className={`map-layers-list ${
+                          featureLayers.length ? "has-filter" : ""
+                        }`}
+                      >
+                        {mapLayers.map(mapLayer => (
+                          <li
+                            key={mapLayer._id}
+                            onClick={this._handleFeatureLayerClick(mapLayer)}
+                            className={
+                              featureLayers.indexOf(mapLayer._id) != -1
+                                ? "active"
+                                : ""
+                            }
+                          >
+                            <FontAwesomeIcon
+                              icon={
+                                featureLayers.indexOf(mapLayer._id) != -1
+                                  ? "toggle-on"
+                                  : "toggle-off"
+                              }
+                            />
+                            <h4>{mapLayer.title}</h4>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ) : null}
                   {/* <li className="disabled">
                     <FontAwesomeIcon icon="globe" />
                     <span>
@@ -769,7 +891,7 @@ class MapPage extends Component {
                   </li> */}
                 </LayerFilter>
               </Tool>
-              {mapFeatures.length ? (
+              {mapFeatures.length && userCan("export", "map") ? (
                 <Tool transparent>
                   <Button href="javascript:void(0);" onClick={this._export}>
                     <span className="icon">
@@ -801,33 +923,53 @@ class MapPage extends Component {
                     name="title"
                     value={this.getFeatureValue("title")}
                     onChange={this._handleFeatureChange}
+                    disabled={!userCan("edit", "map")}
                   />
                   <textarea
                     placeholder={intl.formatMessage(messages.formDescription)}
                     name="description"
                     value={this.getFeatureValue("description")}
                     onChange={this._handleFeatureChange}
+                    disabled={!userCan("edit", "map")}
                   />
-                  <ColorSelector
-                    name="color"
-                    value={this.getFeatureValue("color")}
-                    onChange={this._handleFeatureChange}
-                  />
-                  <div className="actions">
-                    <a
-                      className="button delete"
-                      onClick={this._handleRemoveClick}
-                    >
-                      <FormattedMessage
-                        id="app.forms.remove"
-                        defaultMessage="Remove"
-                      />
-                    </a>
-                    <input
-                      type="submit"
-                      value={intl.formatMessage(messages.formSave)}
+                  {userCan("edit", "map") ? (
+                    <ColorSelector
+                      name="color"
+                      value={this.getFeatureValue("color")}
+                      onChange={this._handleFeatureChange}
                     />
-                  </div>
+                  ) : null}
+                  <Form.Field
+                    label={intl.formatMessage(
+                      userCan("edit", "map")
+                        ? messages.formMapLayerLabel
+                        : messages.formMapLayerReadLabel
+                    )}
+                  >
+                    <MapLayerSelect
+                      name="mapLayerId"
+                      value={this.getFeatureValue("mapLayerId")}
+                      onChange={this._handleFeatureChange}
+                      disabled={!userCan("edit", "map")}
+                    />
+                  </Form.Field>
+                  {userCan("edit", "map") ? (
+                    <div className="actions">
+                      <a
+                        className="button delete"
+                        onClick={this._handleRemoveClick}
+                      >
+                        <FormattedMessage
+                          id="app.forms.remove"
+                          defaultMessage="Remove"
+                        />
+                      </a>
+                      <input
+                        type="submit"
+                        value={intl.formatMessage(messages.formSave)}
+                      />
+                    </div>
+                  ) : null}
                 </Form>
               </div>
             ) : null}

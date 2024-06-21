@@ -1,7 +1,15 @@
 import React, { Component } from "react";
+import {
+  injectIntl,
+  intlShape,
+  defineMessages,
+  FormattedMessage,
+} from "react-intl";
 import ReactTooltip from "react-tooltip";
 import styled from "styled-components";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+
+import { userCan } from "/imports/ui2/utils/permissions";
 
 import { modalStore } from "../containers/Modal.jsx";
 import { alertStore } from "../containers/Alerts.jsx";
@@ -11,6 +19,72 @@ import Loading from "../components/Loading.jsx";
 import Form from "../components/Form.jsx";
 import Button from "../components/Button.jsx";
 import CopyToClipboard from "../components/CopyToClipboard.jsx";
+
+const messages = defineMessages({
+  newTitle: {
+    id: "app.faq.new_title",
+    defaultMessage: "New answer",
+  },
+  editingTitle: {
+    id: "app.faq.editing_title",
+    defaultMessage: "Editing answer",
+  },
+  confirmRemove: {
+    id: "app.faq.confirm_remove",
+    defaultMessage: "Are you sure you'd like to remove this answer?",
+  },
+  removed: {
+    id: "app.faq.removed_label",
+    defaultMessage: "Removed",
+  },
+  copy: {
+    id: "app.faq.copy",
+    defaultMessage: "Copy to clipboard",
+  },
+  edit: {
+    id: "app.faq.edit",
+    defaultMessage: "Edit",
+  },
+  view: {
+    id: "app.faq.view",
+    defaultMessage: "View",
+  },
+  remove: {
+    id: "app.faq.remove",
+    defaultMessage: "Remove",
+  },
+  save: {
+    id: "app.faq.save",
+    defaultMessage: "Save",
+  },
+  gridMode: {
+    id: "app.faq.view_mode.grid",
+    defaultMessage: "View as grid",
+  },
+  documentMode: {
+    id: "app.faq.view_mode.document",
+    defaultMessage: "View as document",
+  },
+});
+
+const formMessages = defineMessages({
+  questionLabel: {
+    id: "app.faq.form.question_label",
+    defaultMessage: "Question",
+  },
+  questionPlaceholder: {
+    id: "app.faq.form.question_placeholder",
+    defaultMessage: "Describe the question",
+  },
+  answerLabel: {
+    id: "app.faq.form.answer_label",
+    defaultMessage: "Answer",
+  },
+  answerPlaceholder: {
+    id: "app.faq.form.answer_placeholder",
+    defaultMessage: "Type the default answer for this question",
+  },
+});
 
 const ViewContainer = styled.article`
   h2 {
@@ -43,20 +117,20 @@ const ViewContainer = styled.article`
 `;
 
 class FAQView extends Component {
-  _handleEditClick = ev => {
-    const { item } = this.props;
+  _handleEditClick = (ev) => {
+    const { intl, item } = this.props;
     ev.preventDefault();
-    modalStore.setTitle("Editing answer");
-    modalStore.set(<FAQEdit item={item} />);
+    modalStore.setTitle(intl.formatMessage(messages.editingTitle));
+    modalStore.set(<FAQEditIntl item={item} />);
   };
-  _handleRemoveClick = ev => {
-    const { item } = this.props;
-    if (confirm("Are you sure you'd like to remove this answer?")) {
+  _handleRemoveClick = (ev) => {
+    const { intl, item } = this.props;
+    if (confirm(intl.formatMessage(messages.confirmRemove))) {
       Meteor.call("faq.remove", { _id: item._id }, (err, res) => {
         if (err) {
           alertStore.add(err);
         } else {
-          alertStore.add("Removed", "success");
+          alertStore.add(intl.formatMessage(messages.removed), "success");
           modalStore.reset();
         }
       });
@@ -71,19 +145,35 @@ class FAQView extends Component {
         <p>{item.answer}</p>
         <aside>
           <CopyToClipboard text={item.answer}>
-            <FontAwesomeIcon icon="copy" /> Copy to clipboard
+            <FontAwesomeIcon icon="copy" />{" "}
+            <FormattedMessage
+              id="app.faq.copy"
+              defaultMessage="Copy to clipboard"
+            />
           </CopyToClipboard>
-          <a href="javascript:void(0);" onClick={this._handleEditClick}>
-            <FontAwesomeIcon icon="edit" /> Edit
-          </a>
-          <a href="javascript:void(0);" onClick={this._handleRemoveClick}>
-            <FontAwesomeIcon icon="times" /> Remove
-          </a>
+          {userCan("edit", "faq") ? (
+            <>
+              <a href="javascript:void(0);" onClick={this._handleEditClick}>
+                <FontAwesomeIcon icon="edit" />{" "}
+                <FormattedMessage id="app.faq.edit" defaultMessage="Edit" />
+              </a>
+              <a href="javascript:void(0);" onClick={this._handleRemoveClick}>
+                <FontAwesomeIcon icon="times" />{" "}
+                <FormattedMessage id="app.faq.remove" defaultMessage="Remove" />
+              </a>
+            </>
+          ) : null}
         </aside>
       </ViewContainer>
     );
   }
 }
+
+FAQView.propTypes = {
+  intl: intlShape.isRequired,
+};
+
+const FAQViewIntl = injectIntl(FAQView);
 
 const EditContainer = styled.div``;
 
@@ -94,8 +184,8 @@ class FAQEdit extends Component {
       loading: false,
       formData: {
         question: "",
-        answer: ""
-      }
+        answer: "",
+      },
     };
   }
   componentDidMount() {
@@ -103,18 +193,18 @@ class FAQEdit extends Component {
     if (item && item._id && item.campaignId) {
       this.setState({
         campaignId: item.campaignId,
-        formData: item
+        formData: item,
       });
     } else if (campaignId) {
       this.setState({ campaignId });
     }
   }
-  _handleSubmit = ev => {
+  _handleSubmit = (ev) => {
     ev.preventDefault();
     const { campaignId, onSuccess } = this.props;
     const { _id, question, answer } = this.state.formData;
     this.setState({
-      loading: true
+      loading: true,
     });
     if (!_id) {
       Meteor.call(
@@ -122,7 +212,7 @@ class FAQEdit extends Component {
         { campaignId, question, answer },
         (err, res) => {
           this.setState({
-            loading: false
+            loading: false,
           });
           if (err) {
             alertStore.add(err);
@@ -137,7 +227,7 @@ class FAQEdit extends Component {
     } else {
       Meteor.call("faq.update", { _id, question, answer }, (err, res) => {
         this.setState({
-          loading: false
+          loading: false,
         });
         if (err) {
           alertStore.add(err);
@@ -154,45 +244,53 @@ class FAQEdit extends Component {
     this.setState({
       formData: {
         ...this.state.formData,
-        [target.name]: target.value
-      }
+        [target.name]: target.value,
+      },
     });
   };
   render() {
+    const { intl } = this.props;
     const { formData, loading } = this.state;
     return (
       <EditContainer>
         <Form onSubmit={this._handleSubmit}>
-          <Form.Field label="Question">
+          <Form.Field label={intl.formatMessage(formMessages.questionLabel)}>
             <input
               type="text"
-              placeholder="Describe the question"
+              placeholder={intl.formatMessage(formMessages.questionPlaceholder)}
               onChange={this._handleChange}
               name="question"
               value={formData.question}
             />
           </Form.Field>
-          <Form.Field label="Answer">
+          <Form.Field label={intl.formatMessage(formMessages.answerLabel)}>
             <textarea
-              placeholder="Type the default answer to this question"
+              placeholder={intl.formatMessage(formMessages.answerPlaceholder)}
               onChange={this._handleChange}
               name="answer"
               value={formData.answer}
             />
           </Form.Field>
-          <input disabled={loading} type="submit" value="Save" />
+          <input
+            disabled={loading}
+            type="submit"
+            value={intl.formatMessage(messages.save)}
+          />
         </Form>
       </EditContainer>
     );
   }
 }
 
+FAQEdit.propTypes = {
+  intl: intlShape.isRequired,
+};
+
+const FAQEditIntl = injectIntl(FAQEdit);
+
 const Container = styled.div`
-  max-width: 960px;
-  margin: 0 auto;
   .intro {
     display: flex;
-    max-width: 600px;
     margin: 4rem auto;
     align-items: center;
     border: 1px solid #ddd;
@@ -201,7 +299,7 @@ const Container = styled.div`
     box-shadow: 0 0 2rem rgba(0, 0, 0, 0.25);
     padding: 2rem;
     p {
-      margin: 0 2rem 0 0;
+      margin: 0 1rem 0 0;
     }
     .button {
       white-space: nowrap;
@@ -211,6 +309,13 @@ const Container = styled.div`
     text-align: right;
     margin: 0 0 2rem;
     font-size: 0.8em;
+    display: flex;
+    > * {
+      flex: 0 0 auto;
+    }
+    > .spacer {
+      flex: 1 1 100%;
+    }
     .new-faq {
       margin: 0;
     }
@@ -222,7 +327,7 @@ const Container = styled.div`
     margin-right: -0.5rem;
     article {
       font-size: 0.8em;
-      flex: 1 1 20%;
+      flex: 1 1 30%;
       margin: 0 0.5rem 1rem;
       border: 1px solid #ddd;
       border-radius: 7px;
@@ -315,103 +420,197 @@ const Container = styled.div`
       }
     }
   }
+  .faq-document {
+    background: #fff;
+    padding: 2rem;
+    border-radius: 7px;
+    border: 1px solid #ddd;
+    article {
+      border-bottom: 1px solid #ddd;
+      margin: 0 0 1rem;
+      h2 {
+        margin: 0 0 1rem;
+      }
+      &:last-child {
+        margin: 0;
+        border: 0;
+      }
+    }
+  }
 `;
 
-export default class FAQPage extends Component {
-  _handleNewClick = ev => {
-    const { campaignId } = this.props;
+class FAQPage extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      viewMode: "grid",
+    };
+  }
+  _handleNewClick = (ev) => {
+    const { intl, campaignId } = this.props;
     ev.preventDefault();
-    modalStore.setTitle(`New answer`);
+    modalStore.setTitle(intl.formatMessage(messages.newTitle));
     modalStore.set(
-      <FAQEdit campaignId={campaignId} onSuccess={this._handleCreateSuccess} />
+      <FAQEditIntl
+        campaignId={campaignId}
+        onSuccess={this._handleCreateSuccess}
+      />
     );
   };
   _handleCreateSuccess = () => {
     modalStore.reset();
   };
-  _handleViewClick = item => ev => {
+  _handleViewClick = (item) => (ev) => {
     ev.preventDefault();
-    modalStore.set(<FAQView item={item} />);
+    modalStore.set(<FAQViewIntl item={item} />);
   };
-  _handleEditClick = item => ev => {
+  _handleEditClick = (item) => (ev) => {
+    const { intl } = this.props;
     ev.preventDefault();
-    modalStore.setTitle("Editing answer");
-    modalStore.set(<FAQEdit item={item} />);
+    modalStore.setTitle(intl.formatMessage(messages.editingTitle));
+    modalStore.set(<FAQEditIntl item={item} />);
+  };
+  _handleViewModeClick = (viewMode) => (ev) => {
+    ev.preventDefault();
+    this.setState({ viewMode });
   };
   render() {
-    const { loading, faq } = this.props;
+    const { intl, loading, faq } = this.props;
+    const { viewMode } = this.state;
     if (loading) {
       return <Loading full />;
     }
     return (
-      <Page.Content full>
+      <Page.Content plain>
         <Container>
-          <Page.Title>Frequently Asked Questions</Page.Title>
+          <Page.Title>
+            <FormattedMessage
+              id="app.faq.title"
+              defaultMessage="Frequently Asked Questions"
+            />
+          </Page.Title>
           {!faq.length ? (
             <div className="intro">
               <p>
-                Create answers to frequently asked questions to optimize your
-                campaign communication.
+                <FormattedMessage
+                  id="app.faq.description"
+                  defaultMessage="Create answers to frequently asked questions to optimize your campaign communication."
+                />
               </p>
-              <Button primary onClick={this._handleNewClick}>
-                Create your first answer
-              </Button>
+              {userCan("edit", "faq") ? (
+                <Button
+                  className="primary button"
+                  onClick={this._handleNewClick}
+                >
+                  <FormattedMessage
+                    id="app.faq.create_first"
+                    defaultMessage="Create your first answer"
+                  />
+                </Button>
+              ) : null}
             </div>
           ) : (
             <>
-              <div className="page-actions">
-                <Button
-                  className="button new-faq"
-                  onClick={this._handleNewClick}
-                >
-                  + Create new answer
-                </Button>
-              </div>
-              <section className="faq-list">
-                {faq.map(item => (
-                  <article key={item._id} className="faq-item">
-                    <header>
-                      <h2>
-                        <a
-                          href="javascript:void(0);"
-                          onClick={this._handleViewClick(item)}
-                        >
-                          {item.question}
-                        </a>
-                      </h2>
-                    </header>
-                    <section>
-                      <p>{item.answer}</p>
-                      <aside className="item-actions">
-                        <CopyToClipboard
-                          text={item.answer}
-                          data-tip="Copy"
-                          data-for={`faq-${item._id}`}
-                        >
-                          <FontAwesomeIcon icon="copy" />
-                        </CopyToClipboard>
-                        <a
-                          href="javascript:void(0);"
-                          onClick={this._handleViewClick(item)}
-                          data-tip="View"
-                          data-for={`faq-${item._id}`}
-                        >
-                          <FontAwesomeIcon icon="eye" />
-                        </a>
-                        <a
-                          href="javascript:void(0);"
-                          onClick={this._handleEditClick(item)}
-                          data-tip="Edit"
-                          data-for={`faq-${item._id}`}
-                        >
-                          <FontAwesomeIcon icon="edit" />
-                        </a>
-                      </aside>
-                      <ReactTooltip id={`faq-${item._id}`} effect="solid" />
-                    </section>
-                  </article>
-                ))}
-              </section>
+              {userCan("edit", "faq") ? (
+                <div className="page-actions">
+                  <Button.Group>
+                    <Button
+                      data-tip={intl.formatMessage(messages.gridMode)}
+                      className={
+                        viewMode == "grid" ? "active button" : "button"
+                      }
+                      data-for="faq-actions"
+                      onClick={this._handleViewModeClick("grid")}
+                    >
+                      <FontAwesomeIcon icon="th-large" />
+                    </Button>
+                    <Button
+                      className={
+                        viewMode == "document" ? "active button" : "button"
+                      }
+                      data-tip={intl.formatMessage(messages.documentMode)}
+                      data-for="faq-actions"
+                      onClick={this._handleViewModeClick("document")}
+                    >
+                      <FontAwesomeIcon icon="align-left" />
+                    </Button>
+                  </Button.Group>
+                  <div className="spacer" />
+                  <Button
+                    className="button primary new-faq"
+                    onClick={this._handleNewClick}
+                  >
+                    <FormattedMessage
+                      id="app.faq.create_new"
+                      defaultMessage="+ Create new answer"
+                    />
+                  </Button>
+                  <ReactTooltip id="faq-actions" effect="solid" />
+                </div>
+              ) : null}
+              {viewMode == "grid" ? (
+                <section className="faq-list">
+                  {faq.map((item) => (
+                    <article key={item._id} className="faq-item">
+                      <header>
+                        <h2>
+                          <a
+                            href="javascript:void(0);"
+                            onClick={this._handleViewClick(item)}
+                          >
+                            {item.question}
+                          </a>
+                        </h2>
+                      </header>
+                      <section>
+                        <p>{item.answer}</p>
+                        <aside className="item-actions">
+                          <CopyToClipboard
+                            text={item.answer}
+                            data-tip={intl.formatMessage(messages.copy)}
+                            data-for={`faq-${item._id}`}
+                          >
+                            <FontAwesomeIcon icon="copy" />
+                          </CopyToClipboard>
+                          <a
+                            href="javascript:void(0);"
+                            onClick={this._handleViewClick(item)}
+                            data-tip={intl.formatMessage(messages.view)}
+                            data-for={`faq-${item._id}`}
+                          >
+                            <FontAwesomeIcon icon="eye" />
+                          </a>
+                          {userCan("edit", "faq") ? (
+                            <a
+                              href="javascript:void(0);"
+                              onClick={this._handleEditClick(item)}
+                              data-tip={intl.formatMessage(messages.edit)}
+                              data-for={`faq-${item._id}`}
+                            >
+                              <FontAwesomeIcon icon="edit" />
+                            </a>
+                          ) : null}
+                        </aside>
+                        <ReactTooltip id={`faq-${item._id}`} effect="solid" />
+                      </section>
+                    </article>
+                  ))}
+                </section>
+              ) : null}
+              {viewMode == "document" ? (
+                <section className="faq-document">
+                  {faq.map((item) => (
+                    <article key={`document-${item._id}`}>
+                      <header>
+                        <h2>{item.question}</h2>
+                      </header>
+                      <section>
+                        <p>{item.answer}</p>
+                      </section>
+                    </article>
+                  ))}
+                </section>
+              ) : null}
             </>
           )}
         </Container>
@@ -419,3 +618,9 @@ export default class FAQPage extends Component {
     );
   }
 }
+
+FAQPage.propTypes = {
+  intl: intlShape.isRequired,
+};
+
+export default injectIntl(FAQPage);

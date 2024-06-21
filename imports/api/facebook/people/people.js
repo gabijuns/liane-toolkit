@@ -10,95 +10,120 @@ People.schema = new SimpleSchema({
     type: String,
     index: true,
     optional: true,
-    unique: true
+    unique: true,
   },
   name: {
     type: String,
     index: true,
-    optional: true
+    optional: true,
   },
   campaignId: {
     type: String,
-    index: true
+    index: true,
   },
   campaignMeta: {
     type: Object,
     blackbox: true,
-    optional: true
+    optional: true,
   },
   facebookAccountId: {
     type: String,
     optional: true,
-    index: true
+    index: true,
   },
   facebookAccounts: {
     type: Array,
     optional: true,
-    index: true
+    index: true,
   },
   "facebookAccounts.$": {
-    type: String
+    type: String,
   },
   lastInteractionDate: {
     type: Date,
     optional: true,
-    index: true
+    index: true,
   },
   source: {
     type: String,
     optional: true,
-    index: true
+    index: true,
   },
   canReceivePrivateReply: {
     type: Array,
     optional: true,
-    index: true
+    index: true,
   },
   "canReceivePrivateReply.$": {
-    type: String
+    type: String,
   },
   receivedAutoPrivateReply: {
     type: Boolean,
     defaultValue: false,
     optional: true,
-    index: true
+    index: true,
+  },
+  imported: {
+    type: Boolean,
+    defaultValue: false,
+    optional: true,
+    index: true,
+  },
+  unresolved: {
+    type: Boolean,
+    defaultValue: false,
+    optional: true,
+    index: true,
+  },
+  related: {
+    type: Array,
+    optional: true,
+  },
+  "related.$": {
+    type: String,
   },
   listId: {
     type: String,
     optional: true,
-    index: true
+    index: true,
   },
   filledForm: {
     type: Boolean,
     optional: true,
-    index: true
+    index: true,
   },
   counts: {
     type: Object,
     blackbox: true,
-    optional: true
+    optional: true,
   },
   formId: {
     type: String,
     index: true,
-    optional: true
+    optional: true,
   },
   location: {
     type: Object,
-    optional: true
+    optional: true,
   },
   "location.formattedAddress": {
     type: String,
-    optional: true
+    optional: true,
   },
   "location.coordinates": {
     type: Array,
     minCount: 2,
     maxCount: 2,
-    optional: true
+    optional: true,
   },
   "location.coordinates.$": {
-    type: Number
+    type: Number,
+  },
+  chatbotStatus: {
+    type: String,
+    allowedValues: ["bot", "pending", "admin"],
+    optional: true,
+    index: true,
   },
   createdAt: {
     type: Date,
@@ -111,36 +136,36 @@ People.schema = new SimpleSchema({
       } else {
         return this.unset();
       }
-    }
+    },
   },
   updatedAt: {
     type: Date,
     index: true,
     autoValue() {
       return new Date();
-    }
-  }
+    },
+  },
 });
 
 PeopleTags.schema = new SimpleSchema({
   name: {
     type: String,
-    index: true
+    index: true,
   },
   campaignId: {
     type: String,
-    index: true
-  }
+    index: true,
+  },
 });
 
 PeopleLists.schema = new SimpleSchema({
   name: {
     type: String,
-    index: true
+    index: true,
   },
   campaignId: {
     type: String,
-    index: true
+    index: true,
   },
   createdAt: {
     type: Date,
@@ -153,33 +178,33 @@ PeopleLists.schema = new SimpleSchema({
       } else {
         return this.unset();
       }
-    }
-  }
+    },
+  },
 });
 
 PeopleExports.schema = new SimpleSchema({
   campaignId: {
     type: String,
-    index: true
+    index: true,
   },
   count: {
     type: Number,
-    index: true
+    index: true,
   },
   url: {
-    type: String
+    type: String,
   },
   path: {
-    type: String
+    type: String,
   },
   expired: {
     type: Boolean,
     index: true,
-    defaultValue: false
+    defaultValue: false,
   },
   expiresAt: {
     type: Date,
-    index: true
+    index: true,
   },
   createdAt: {
     type: Date,
@@ -192,8 +217,8 @@ PeopleExports.schema = new SimpleSchema({
       } else {
         return this.unset();
       }
-    }
-  }
+    },
+  },
 });
 
 People.attachSchema(People.schema);
@@ -205,57 +230,78 @@ Meteor.startup(() => {
   if (Meteor.isServer) {
     People.rawCollection().createIndex({
       name: "text",
-      "campaignMeta.contact.email": "text"
-    });
-    People.rawCollection().createIndex({
-      facebookAccounts: 1
+      "campaignMeta.contact.email": "text",
     });
     People.rawCollection().createIndex(
       {
+        "campaignMeta.social_networks.instagram": 1,
+      },
+      { sparse: true }
+    );
+    People.rawCollection().createIndex(
+      {
+        "campaignMeta.social_networks.twitter": 1,
+      },
+      { sparse: true }
+    );
+    People.rawCollection().createIndex(
+      {
         campaignId: 1,
-        facebookAccounts: 1
+        facebookAccounts: 1,
       },
       { background: true }
     );
     People.rawCollection().createIndex(
       {
-        "counts.likes": 1
+        "counts.facebook.likes": 1,
       },
       { sparse: true }
     );
     People.rawCollection().createIndex(
       {
-        "counts.comments": 1
+        "counts.facebook.comments": 1,
       },
       { sparse: true }
     );
     People.rawCollection().createIndex(
       {
-        "campaignMeta.influencer": 1
+        "counts.instagram.comments": 1,
       },
       { sparse: true }
     );
     People.rawCollection().createIndex(
       {
-        "campaignMeta.voteIntent": 1
+        "counts.totalComments": 1,
       },
       { sparse: true }
     );
     People.rawCollection().createIndex(
       {
-        "campaignMeta.starred": 1
+        "campaignMeta.influencer": 1,
       },
       { sparse: true }
     );
     People.rawCollection().createIndex(
       {
-        "campaignMeta.troll": 1
+        "campaignMeta.voteIntent": 1,
       },
       { sparse: true }
     );
     People.rawCollection().createIndex(
       {
-        "campaignMeta.basic_info.tags": 1
+        "campaignMeta.starred": 1,
+      },
+      { sparse: true }
+    );
+    People.rawCollection().createIndex(
+      {
+        "campaignMeta.troll": 1,
+      },
+      { sparse: true }
+    );
+    People.rawCollection().createIndex(
+      {
+        "campaignMeta.basic_info.tags": 1,
       },
       { sparse: true }
     );

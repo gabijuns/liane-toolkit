@@ -8,7 +8,7 @@ import { debounce, sortBy } from "lodash";
 
 const CommentsSubs = new SubsManager();
 
-export default withTracker(props => {
+export default withTracker((props) => {
   const queryParams = props.query;
 
   const facebookId = props.campaign.facebookAccount.facebookId;
@@ -18,10 +18,9 @@ export default withTracker(props => {
   const skip = (page - 1) * limit;
 
   let query = {
-    // personId: {},
-    // personId: { $nin: [facebookId] },
+    personId: { $nin: [facebookId] },
     created_time: { $exists: true },
-    resolved: { $ne: true }
+    resolved: { $ne: true },
   };
 
   if (queryParams.q) {
@@ -49,46 +48,60 @@ export default withTracker(props => {
     query.can_reply_privately = true;
   }
 
+  if (queryParams.entry) {
+    query.entryId = queryParams.entry;
+  }
+
+  if (queryParams.source) {
+    if (queryParams.source != "facebook") {
+      query.source = queryParams.source;
+    } else {
+      query.source = undefined;
+    }
+  }
+
   let commentsHandle, loading;
   let comments = [];
 
   const commentsOptions = {
     limit,
     skip,
-    transform: comment => {
+    transform: (comment) => {
       comment.entry = Entries.findOne(comment.entryId);
       comment.person = People.findOne({
-        facebookId: comment.personId,
-        campaignId: props.campaignId
+        $or: [
+          { facebookId: comment.personId },
+          { "campaignMeta.social_networks.instagram": `@${comment.personId}` },
+        ],
+        campaignId: props.campaignId,
       });
       comment.parent = Comments.findOne(comment.parentId);
       comment.adminReplies = Comments.find({
         personId: facebookId,
-        parentId: comment._id
+        parentId: comment._id,
       }).fetch();
       return comment;
-    }
+    },
   };
 
   commentsHandle = CommentsSubs.subscribe("comments.byAccount", {
     campaignId: props.campaignId,
     query,
     options: {
-      limit,
-      skip
-    }
+      limit: limit + skip,
+    },
   });
   loading = !commentsHandle.ready();
   comments = commentsHandle.ready()
     ? Comments.find(query, commentsOptions).fetch()
     : [];
-  comments = sortBy(comments, comment => -new Date(comment.created_time));
+  comments = sortBy(comments, (comment) => -new Date(comment.created_time));
 
   return {
     loading,
     comments,
     query,
     page,
-    limit
+    limit,
   };
 })(CommentsPage);

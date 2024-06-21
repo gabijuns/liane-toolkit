@@ -1,27 +1,56 @@
 import React, { Component } from "react";
+import { injectIntl, intlShape, defineMessages } from "react-intl";
 import ReactTooltip from "react-tooltip";
 import styled from "styled-components";
 import PropTypes from "prop-types";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
+const messages = defineMessages({
+  noReaction: {
+    id: "app.facebook.no_reaction",
+    defaultMessage: "No reaction",
+  },
+  oneReaction: {
+    id: "app.facebook.one_reaction",
+    defaultMessage: "1 reaction",
+  },
+  anyReactions: {
+    id: "app.facebook.any_reactions",
+    defaultMessage: "{count} reactions",
+  },
+});
+
 const sizes = {
   tiny: 16,
   small: 24,
   medium: 32,
   large: 46,
-  huge: 64
+  huge: 64,
 };
 
-const REACTIONS = ["like", "love", "haha", "wow", "sad", "angry"];
+const REACTIONS = [
+  "like",
+  "care",
+  "pride",
+  "love",
+  "haha",
+  "wow",
+  "sad",
+  "angry",
+  "thankful",
+];
 
 const imagePaths = {
   like: "/images/reactions/like.png",
+  care: "/images/reactions/care.png",
+  pride: "/images/reactions/pride.png",
   love: "/images/reactions/love.png",
   haha: "/images/reactions/haha.png",
   wow: "/images/reactions/wow.png",
   sad: "/images/reactions/sad.png",
-  angry: "/images/reactions/angry.png"
+  angry: "/images/reactions/angry.png",
+  thankful: "/images/reactions/thankful.png",
 };
 
 const FilterContainer = styled.div`
@@ -62,7 +91,7 @@ class Filter extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      selected: false
+      selected: false,
     };
   }
   componentDidMount() {
@@ -78,12 +107,12 @@ class Filter extends Component {
     }
   }
   static propTypes = {
-    size: PropTypes.string
+    size: PropTypes.string,
   };
-  _handleClick = type => ev => {
+  _handleClick = (type) => (ev) => {
     const { selected } = this.state;
     this.setState({
-      selected: selected == type ? false : type
+      selected: selected == type ? false : type,
     });
   };
   render() {
@@ -115,7 +144,7 @@ class Filter extends Component {
               />
             </a>
           ) : null}
-          {keys.map(key => (
+          {keys.map((key) => (
             <a
               href="javascript:void(0);"
               key={key}
@@ -126,7 +155,7 @@ class Filter extends Component {
                 src={imagePaths[key]}
                 style={{
                   width: sizes[size || "small"] + "px",
-                  height: sizes[size || "small"] + "px"
+                  height: sizes[size || "small"] + "px",
                 }}
                 data-tip={key}
                 data-for={tooltipId}
@@ -176,26 +205,26 @@ const CountContainer = styled.div`
 
 class Count extends Component {
   label = () => {
-    const { total } = this.props;
+    const { intl, total } = this.props;
     if (!total || total == 0) {
-      return "No reaction";
+      return intl.formatMessage(messages.noReaction);
     } else if (total == 1) {
-      return "1 reaction";
+      return intl.formatMessage(messages.oneReaction);
     } else {
-      return `${total} reactions`;
+      return intl.formatMessage(messages.anyReactions, { count: total });
     }
   };
   render() {
     const { counts, total, target } = this.props;
     if (typeof counts !== "object") return null;
     const values = Object.keys(counts)
-      .map(k => {
+      .map((k) => {
         return {
           k,
-          v: counts[k] || 0
+          v: counts[k] || 0,
         };
       })
-      .filter(item => {
+      .filter((item) => {
         return REACTIONS.indexOf(item.k) !== -1 && item.v > 0;
       })
       .sort((a, b) => {
@@ -216,7 +245,7 @@ class Count extends Component {
                 src={imagePaths[item.k]}
                 style={{
                   width: "14px",
-                  height: "14px"
+                  height: "14px",
                 }}
                 data-tip={item.v}
                 data-for={tooltipId}
@@ -231,13 +260,19 @@ class Count extends Component {
   }
 }
 
+Count.propTypes = {
+  intl: intlShape.isRequired,
+};
+
+const CountIntl = injectIntl(Count);
+
 export default class Reaction extends Component {
   static propTypes = {
     reaction: PropTypes.string.isRequired,
-    size: PropTypes.string
+    size: PropTypes.string,
   };
   static Filter = Filter;
-  static Count = Count;
+  static Count = CountIntl;
   render() {
     const { reaction, size, ...props } = this.props;
     if (imagePaths[reaction.toLowerCase()]) {
@@ -247,7 +282,7 @@ export default class Reaction extends Component {
           src={imagePaths[reaction.toLowerCase()]}
           style={{
             width: sizes[size || "small"] + "px",
-            height: sizes[size || "small"] + "px"
+            height: sizes[size || "small"] + "px",
           }}
         />
       );

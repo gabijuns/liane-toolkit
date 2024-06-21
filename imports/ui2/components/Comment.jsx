@@ -1,12 +1,52 @@
 import React, { Component } from "react";
+import {
+  injectIntl,
+  intlShape,
+  defineMessages,
+  FormattedMessage,
+  FormattedHTMLMessage,
+} from "react-intl";
 import styled from "styled-components";
 import moment from "moment";
+
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+
+import { userCan } from "/imports/ui2/utils/permissions";
 
 import { modalStore } from "../containers/Modal.jsx";
 
 import Button from "./Button.jsx";
 import Reaction from "./Reaction.jsx";
 import Reply from "./Reply.jsx";
+
+import PersonNamePopup from "./PersonNamePopup.jsx";
+
+const messages = defineMessages({
+  countNoComments: {
+    id: "app.comments.counts.no_comments",
+    defaultMessage: "No comments",
+  },
+  countOneComment: {
+    id: "app.comments.counts.one_comment",
+    defaultMessage: "1 comment",
+  },
+  countAnyComments: {
+    id: "app.comments.counts.any_comments",
+    defaultMessage: "{count} comments",
+  },
+  replyUnknownPerson: {
+    id: "app.reply.unknown_person",
+    defaultMessage: "unknown person",
+  },
+  replyTitle: {
+    id: "app.reply.title",
+    defaultMessage: "Replying {name}",
+  },
+  commentUnknown: {
+    id: "app.comment.header.unknown_name",
+    defaultMessage: "Unknown person",
+  },
+});
 
 const Container = styled.article`
   header {
@@ -23,10 +63,24 @@ const Container = styled.article`
       margin: 0 0 1rem;
       font-family: "Open sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
       font-size: 1em;
+      .icon {
+        font-size: 1.2em;
+        color: #3b5998;
+        margin-right: 0.5rem;
+        &.instagram {
+          color: #dd2a7b;
+        }
+      }
       .name {
         color: #333;
         font-weight: 600;
         font-size: 1.1em;
+        a {
+          color: #333;
+          &:hover {
+            color: #000;
+          }
+        }
       }
       .date {
         color: #ccc;
@@ -54,7 +108,7 @@ const Container = styled.article`
       position: absolute;
       width: 10px;
       height: 10px;
-      left: 1rem;
+      left: 2rem;
       top: -5px;
       transform: rotate(45deg);
     }
@@ -123,13 +177,13 @@ const CountContainer = styled.div`
 
 class Count extends Component {
   label = () => {
-    const { total } = this.props;
+    const { intl, total } = this.props;
     if (!total || total == 0) {
-      return "No comments";
+      return intl.formatMessage(messages.countNoComments);
     } else if (total == 1) {
-      return "1 comment";
+      return intl.formatMessage(messages.countOneComment);
     } else {
-      return `${total} comments`;
+      return intl.formatMessage(messages.countAnyComments, { count: total });
     }
   };
   render() {
@@ -137,85 +191,128 @@ class Count extends Component {
   }
 }
 
-export default class Comment extends Component {
-  static Count = Count;
+Count.propTypes = {
+  intl: intlShape.isRequired,
+};
+
+const CountIntl = injectIntl(Count);
+
+export const getFBUrl = (params) => {
+  const encoded = Object.keys(params)
+    .map((key) => `${key}=${encodeURIComponent(params[key])}`)
+    .join("&");
+  return `https://www.facebook.com/permalink.php?${encoded}`;
+};
+
+export const getFBCommentUrl = (comment) => {
+  const id = comment.facebookAccountId;
+  const story_fbid = comment._id.split("_")[0];
+  const comment_id = comment._id.split("_")[1];
+  return getFBUrl({
+    id,
+    story_fbid,
+    comment_id,
+    comment_tracking: '{"tn":"R"}',
+  });
+};
+
+class Comment extends Component {
+  static Count = CountIntl;
   action = () => {
     const { comment } = this.props;
     const url = this.getCommentUrl();
     if (comment.parent) {
       const parentUrl = this.getParentUrl();
       return (
-        <>
-          <a href={url} target="_blank">
-            replied
-          </a>{" "}
-          a{" "}
-          <a href={parentUrl} target="_blank">
-            comment
-          </a>
-        </>
+        <FormattedHTMLMessage
+          id="app.comment.header.reply_header"
+          defaultMessage="<a href='{url}' target='_blank'>replied</a> a <a href='{parent_url}' target='_blank'>comment</a>"
+          values={{ url, parent_url: parentUrl }}
+        />
       );
     } else {
       const postUrl = this.getPostUrl();
       return (
-        <>
-          <a href={url} target="_blank">
-            commented
-          </a>{" "}
-          on a{" "}
-          <a href={postUrl} target="_blank">
-            post
-          </a>
-        </>
+        <FormattedHTMLMessage
+          id="app.comment.header.comment_header"
+          defaultMessage="<a href='{url}' target='_blank'>commented</a> on a <a href='{post_url}' target='_blank'>post</a>"
+          values={{ url, post_url: postUrl }}
+        />
       );
     }
   };
   getCommentUrl = () => {
     const { comment } = this.props;
-    const id = comment.facebookAccountId;
-    const story_fbid = comment._id.split("_")[0];
-    const comment_id = comment._id.split("_")[1];
-    return this.getFBUrl({ id, story_fbid, comment_id });
+    if (comment.source == "instagram") {
+      let url = `${comment.entry.source_data.permalink}c/`;
+      if (comment.parentId) {
+        url += `${comment.parentId}/r/`;
+      }
+      url += comment._id;
+      return url;
+    } else {
+      return getFBCommentUrl(comment);
+    }
   };
   getParentUrl = () => {
     const { comment } = this.props;
-    const id = comment.facebookAccountId;
-    const story_fbid = comment.parentId.split("_")[0];
-    const comment_id = comment.parentId.split("_")[1];
-    return this.getFBUrl({ id, story_fbid, comment_id });
+    if (comment.source == "instagram") {
+      return `${comment.entry.source_data.permalink}c/${comment.parentId}`;
+    } else {
+      const id = comment.facebookAccountId;
+      const story_fbid = comment.parentId.split("_")[0];
+      const comment_id = comment.parentId.split("_")[1];
+      return getFBUrl({ id, story_fbid, comment_id });
+    }
   };
   getPostUrl = () => {
     const { comment } = this.props;
-    const id = comment.facebookAccountId;
-    const story_fbid = comment._id.split("_")[0];
-    return this.getFBUrl({ id, story_fbid });
+    if (comment.source == "instagram") {
+      return comment.entry.source_data.permalink;
+    } else {
+      const id = comment.facebookAccountId;
+      const story_fbid = comment._id.split("_")[0];
+      return getFBUrl({ id, story_fbid });
+    }
   };
-  getFBUrl = params => {
-    const encoded = Object.keys(params)
-      .map(key => `${key}=${encodeURIComponent(params[key])}`)
-      .join("&");
-    return `https://www.facebook.com/permalink.php?${encoded}`;
-  };
-  _handleReplyClick = ev => {
-    const { comment } = this.props;
+  _handleReplyClick = (ev) => {
+    const { intl, comment } = this.props;
     ev.preventDefault();
-    modalStore.setTitle(
-      `Replying ${comment.person ? comment.person.name : "unknown person"}`
-    );
+    const name = comment.person
+      ? comment.person.name
+      : intl.formatMessage(messages.replyUnknownPerson);
+    const title = intl.formatMessage(messages.replyTitle, { name });
+    modalStore.setTitle(title);
     modalStore.set(<Reply comment={comment} defaultSendAs="comment" />);
   };
+
+  _getSourceIcon = () => {
+    const { comment } = this.props;
+    switch (comment.source) {
+      case "instagram":
+        return ["fab", "instagram"];
+      default:
+        return ["fab", "facebook-square"];
+    }
+  };
   render() {
-    const { comment, actions } = this.props;
+    const { intl, comment, actions } = this.props;
     if (comment) {
       return (
         <Container>
           <header>
             <h3>
+              <span className={`icon ${comment.source}`}>
+                <FontAwesomeIcon icon={this._getSourceIcon(comment)} />
+              </span>
               {comment.person ? (
-                <span className="name">{comment.person.name} </span>
+                <PersonNamePopup
+                  name={comment.person.name}
+                  personId={comment.person._id}
+                />
               ) : (
-                "Unknown "
-              )}
+                intl.formatMessage(messages.commentUnknown)
+              )}{" "}
               {this.action()}{" "}
               <span className="date">
                 {moment(comment.created_time).fromNow()}
@@ -237,15 +334,20 @@ export default class Comment extends Component {
             <section className="comment-admin-replies">
               {comment.adminReplies && comment.adminReplies.length ? (
                 <>
-                  <p className="label">You replied</p>
-                  {comment.adminReplies.map(reply => (
+                  <p className="label">
+                    <FormattedMessage
+                      id="app.coment.you_replied"
+                      defaultMessage="You replied"
+                    />
+                  </p>
+                  {comment.adminReplies.map((reply) => (
                     <p className="reply" key={reply._id}>
                       {reply.message}
                     </p>
                   ))}
                 </>
               ) : null}
-              {actions ? (
+              {actions && userCan("edit", "comments") ? (
                 <div className="comment-fb-actions">
                   <Button
                     onClick={this._handleReplyClick}
@@ -253,7 +355,10 @@ export default class Comment extends Component {
                       !comment.can_comment && !comment.can_reply_privately
                     }
                   >
-                    Reply
+                    <FormattedMessage
+                      id="app.comment.reply_button"
+                      defaultMessage="Reply"
+                    />
                   </Button>
                 </div>
               ) : null}
@@ -265,3 +370,9 @@ export default class Comment extends Component {
     return null;
   }
 }
+
+Comment.propTypes = {
+  intl: intlShape.isRequired,
+};
+
+export default injectIntl(Comment);

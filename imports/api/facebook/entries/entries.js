@@ -9,7 +9,6 @@ Entries.schema = new SimpleSchema({
   },
   facebookAccountId: {
     type: String,
-    index: true,
     index: true
   },
   type: {
@@ -73,9 +72,26 @@ Entries.schema = new SimpleSchema({
   },
   "counts.share": {
     type: Number
+  },
+  source: {
+    type: String,
+    optional: true
+  },
+  source_data: {
+    type: Object,
+    blackbox: true,
+    optional: true,
   }
 });
 
 Entries.attachSchema(Entries.schema);
+
+Meteor.startup(() => {
+  if (Meteor.isServer) {
+    Entries.rawCollection().createIndex({
+      message: "text"
+    });
+  }
+});
 
 exports.Entries = Entries;

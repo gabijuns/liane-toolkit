@@ -1,4 +1,10 @@
 import React, { Component } from "react";
+import {
+  injectIntl,
+  intlShape,
+  defineMessages,
+  FormattedMessage,
+} from "react-intl";
 import styled from "styled-components";
 
 import { alertStore } from "../containers/Alerts.jsx";
@@ -10,6 +16,45 @@ import Button from "./Button.jsx";
 import Comment from "./Comment.jsx";
 import FAQSelect from "./FAQSelect.jsx";
 
+const messages = defineMessages({
+  cannotReceive: {
+    id: "app.reply.cannot_receive",
+    defaultMessage: "Comment cannot receive a private reply",
+  },
+  unavailableComment: {
+    id: "app.reply.unavailable_comment",
+    defaultMessage: "Unable to find a comment to reply privately to",
+  },
+  messageRequired: {
+    id: "app.reply.message_required",
+    defaultMessage: "You must send a message",
+  },
+  messagePlaceholder: {
+    id: "app.reply.message_placeholder",
+    defaultMessage: "Write a message to send",
+  },
+  selectEdit: {
+    id: "app.reply.select_and_edit",
+    defaultMessage: "Select and edit message",
+  },
+  backSelection: {
+    id: "app.reply.back_to_selection",
+    defaultMessage: "Back to selection",
+  },
+  sendPrivate: {
+    id: "app.reply.send_private",
+    defaultMessage: "Send private reply",
+  },
+  sendComment: {
+    id: "app.reply.send_comment",
+    defaultMessage: "Send comment reply",
+  },
+  unavailable: {
+    id: "app.reply.unavailable",
+    defaultMessage: "(unavailable)",
+  },
+});
+
 const Container = styled.div`
   display: flex;
   flex-direction: column;
@@ -18,11 +63,10 @@ const Container = styled.div`
     flex: 1 1 100%;
   }
   .comment {
-    margin: -2rem -2rem 0 -2rem;
+    margin: -2rem -3rem 0 -3rem;
     padding: 2rem;
     font-size: 0.8em;
     background: #f7f7f7;
-    border-radius: 0 0 0 7px;
     .comment-message {
       background-color: #e0e0e0;
       &:before {
@@ -39,14 +83,14 @@ const Container = styled.div`
   .faq-select {
     font-size: 0.9em;
     background: #f7f7f7;
-    margin: 0 -2rem;
+    margin: 0 -3rem;
     padding: 1rem;
     border-bottom: 1px solid #ddd;
   }
   .radio-select {
     display: flex;
     font-size: 0.8em;
-    margin: 0 -2rem;
+    margin: 0 -3rem;
     padding: 1rem 2rem;
     border-top: 1px solid #ddd;
     border-bottom: 1px solid #ddd;
@@ -74,18 +118,19 @@ const Container = styled.div`
   }
 `;
 
-export default class PrivateReply extends Component {
+class Reply extends Component {
   constructor(props) {
     super(props);
     this.state = {
       loading: false,
       sendAs: props.defaultSendAs || "message",
       faq: [],
-      text: ""
+      selectedFAQId: false,
+      text: "",
     };
   }
   componentDidMount() {
-    const { personId, comment, messageOnly } = this.props;
+    const { intl, personId, comment, messageOnly } = this.props;
     if (personId) {
       this.fetchPersonComment();
     } else if (comment) {
@@ -94,53 +139,59 @@ export default class PrivateReply extends Component {
       if (!comment.can_reply_privately) {
         this.setState({
           sendAs: "comment",
-          disabledMessage: true
+          disabledMessage: true,
         });
         if (messageOnly) {
-          alertStore.add("Comment cannot receive a private reply", "error");
+          alertStore.add(intl.formatMessage(messages.cannotReceive), "error");
           modalStore.reset();
         }
       }
     }
   }
   fetchPersonComment = () => {
-    const { personId } = this.props;
+    const { intl, personId } = this.props;
     this.setState({ loading: true });
     Meteor.call("people.getReplyComment", { personId }, (err, res) => {
       this.setState({
-        loading: false
+        loading: false,
       });
       if (err || !res) {
         this.setState({
-          errored: true
+          errored: true,
         });
         if (err) {
           alertStore.add(err);
         } else {
           alertStore.add(
-            "Unable to find a comment to reply privately to",
+            intl.formatMessage(messages.unavailableComment),
             "error"
           );
           modalStore.reset();
         }
-      } else {
+      } else if (res.comment) {
         this.setState({
-          comment: res.comment
+          comment: res.comment,
         });
         this.fetchFAQ(res.comment.person.campaignId);
+      } else {
+        alertStore.add(
+          intl.formatMessage(messages.unavailableComment),
+          "error"
+        );
+        modalStore.reset();
       }
     });
   };
-  fetchFAQ = campaignId => {
+  fetchFAQ = (campaignId) => {
     this.setState({ loading: true });
     Meteor.call("faq.query", { campaignId }, (err, res) => {
       this.setState({
-        loading: false
+        loading: false,
       });
       if (!err) {
         this.setState({
           faq: res,
-          type: res.length ? "faq" : "write"
+          type: res.length ? "faq" : "write",
         });
       }
     });
@@ -149,28 +200,31 @@ export default class PrivateReply extends Component {
     this.setState({
       type: target.value,
       edit: false,
-      text: ""
+      text: "",
+      selectedFAQId: target.value == "write" ? false : this.state.selectedFAQId,
     });
   };
   _handleTextChange = ({ target }) => {
     this.setState({
-      text: target.value
+      text: target.value,
     });
   };
-  _handleFAQChange = id => {
+  _handleFAQChange = (id) => {
     const { faq } = this.state;
     this.setState({
-      text: id ? faq.find(item => item._id == id).answer : ""
+      text: id ? faq.find((item) => item._id == id).answer : "",
+      selectedFAQId: id,
     });
   };
   sendPrivateReply = () => {
-    const { text, comment } = this.state;
+    const { intl } = this.props;
+    const { selectedFAQId, text, comment } = this.state;
     if (!text) {
-      alertStore.add("You must send a message", "error");
+      alertStore.add(intl.formatMessage(messages.messageRequired), "error");
       return;
     }
     this.setState({
-      loading: true
+      loading: true,
     });
     Meteor.call(
       "people.sendPrivateReply",
@@ -178,45 +232,52 @@ export default class PrivateReply extends Component {
         campaignId: comment.person.campaignId,
         personId: comment.person._id,
         commentId: comment._id,
-        message: text
+        message: text,
       },
       (err, res) => {
         this.setState({
-          loading: false
+          loading: false,
         });
         if (err) {
           alertStore.add(err);
         } else {
           alertStore.add("Sent", "success");
+          if (selectedFAQId) {
+            Meteor.call("faq.updateLastUsed", { faqId: selectedFAQId });
+          }
           modalStore.reset();
         }
       }
     );
   };
   sendCommentResponse = () => {
-    const { text, comment } = this.state;
+    const { intl } = this.props;
+    const { selectedFAQId, text, comment } = this.state;
     if (!text) {
-      alertStore.add("You must send a message", "error");
+      alertStore.add(intl.formatMessage(messages.messageRequired), "error");
       return;
     }
     this.setState({
-      loading: true
+      loading: true,
     });
     Meteor.call(
       "comments.send",
       {
         campaignId: comment.person.campaignId,
         objectId: comment._id,
-        message: text
+        message: text,
       },
       (err, res) => {
         this.setState({
-          loading: false
+          loading: false,
         });
         if (err) {
           alertStore.add(err);
         } else {
           alertStore.add("Sent", "success");
+          if (selectedFAQId) {
+            Meteor.call("faq.updateLastUsed", { faqId: selectedFAQId });
+          }
           modalStore.reset();
         }
       }
@@ -234,30 +295,30 @@ export default class PrivateReply extends Component {
       default:
     }
   };
-  _handleSubmit = ev => {
+  _handleSubmit = (ev) => {
     ev.preventDefault();
     this.send();
   };
-  _handleSendClick = ev => {
+  _handleSendClick = (ev) => {
     ev.preventDefault();
     this.send();
   };
-  _handleEditClick = ev => {
+  _handleEditClick = (ev) => {
     ev.preventDefault();
     const { edit, text } = this.state;
     this.setState({
       edit: !edit,
-      text: edit ? "" : text
+      text: edit ? "" : text,
     });
   };
-  _handleSendAsChange = ev => {
+  _handleSendAsChange = (ev) => {
     const { value } = ev.target;
     this.setState({
-      sendAs: value
+      sendAs: value,
     });
   };
   render() {
-    const { messageOnly } = this.props;
+    const { intl, messageOnly } = this.props;
     const {
       sendAs,
       loading,
@@ -267,13 +328,18 @@ export default class PrivateReply extends Component {
       comment,
       text,
       edit,
-      disabledMessage
+      disabledMessage,
     } = this.state;
     if (!errored && comment) {
       return (
         <Container>
           <div className="comment">
-            <p>You are replying:</p>
+            <p>
+              <FormattedMessage
+                id="app.reply.replying"
+                defaultMessage="You are replying:"
+              />
+            </p>
             <Comment comment={comment} />
           </div>
           {!loading ? (
@@ -287,9 +353,12 @@ export default class PrivateReply extends Component {
                     onChange={this._handleTypeChange}
                     checked={type == "faq"}
                     disabled={!faq || !faq.length}
-                    onKeyPress={e => e.key === "Enter" && e.preventDefault()}
+                    onKeyPress={(e) => e.key === "Enter" && e.preventDefault()}
                   />{" "}
-                  Send predefined message
+                  <FormattedMessage
+                    id="app.reply.predefined_message"
+                    defaultMessage="Send predefined message"
+                  />
                 </label>
                 <label>
                   <input
@@ -298,16 +367,21 @@ export default class PrivateReply extends Component {
                     value="write"
                     onChange={this._handleTypeChange}
                     checked={type == "write"}
-                    onKeyPress={e => e.key === "Enter" && e.preventDefault()}
+                    onKeyPress={(e) => e.key === "Enter" && e.preventDefault()}
                   />{" "}
-                  Write new message
+                  <FormattedMessage
+                    id="app.reply.new_message"
+                    defaultMessage="Write new message"
+                  />
                 </label>
               </div>
               {!loading && (!faq || !faq.length) ? (
                 <p className="tip">
-                  You can use predefined messages by creating{" "}
                   <a href={FlowRouter.path("App.faq")} target="_blank">
-                    answers to frequently asked questions
+                    <FormattedMessage
+                      id="app.reply.faq_tip"
+                      defaultMessage="You can use predefined messages by creating answers to frequently asked questions"
+                    />
                   </a>
                   .
                 </p>
@@ -315,7 +389,7 @@ export default class PrivateReply extends Component {
               {type == "write" || edit ? (
                 <textarea
                   className="message-text"
-                  placeholder="Write a message to send"
+                  placeholder={intl.formatMessage(messages.messagePlaceholder)}
                   onChange={this._handleTextChange}
                   value={text}
                 />
@@ -333,7 +407,10 @@ export default class PrivateReply extends Component {
                       checked={sendAs == "comment"}
                       onChange={this._handleSendAsChange}
                     />
-                    Send as a comment reply
+                    <FormattedMessage
+                      id="app.reply.reply_type_comment_label"
+                      defaultMessage="Send as a comment reply"
+                    />
                   </label>
                   <label className={disabledMessage ? "disabled" : ""}>
                     <input
@@ -344,15 +421,22 @@ export default class PrivateReply extends Component {
                       onChange={this._handleSendAsChange}
                       disabled={disabledMessage}
                     />
-                    Send as a private reply{" "}
-                    {disabledMessage ? "(Unavailable)" : ""}
+                    <FormattedMessage
+                      id="app.reply.reply_type_private_label"
+                      defaultMessage="Send as a private reply"
+                    />{" "}
+                    {disabledMessage
+                      ? intl.formatMessage(messages.unavailable)
+                      : ""}
                   </label>
                 </div>
               ) : null}
               <Button.Group>
                 {type == "faq" ? (
                   <Button disabled={!text} onClick={this._handleEditClick}>
-                    {!edit ? "Select and edit message" : "Back to selection"}
+                    {!edit
+                      ? intl.formatMessage(messages.selectEdit)
+                      : intl.formatMessage(messages.backSelection)}
                   </Button>
                 ) : null}
                 <Button
@@ -361,8 +445,8 @@ export default class PrivateReply extends Component {
                   onClick={this._handleSendClick}
                 >
                   {sendAs == "message"
-                    ? "Send private reply"
-                    : "Send comment reply"}
+                    ? intl.formatMessage(messages.sendPrivate)
+                    : intl.formatMessage(messages.sendComment)}
                 </Button>
               </Button.Group>
             </Form>
@@ -377,3 +461,9 @@ export default class PrivateReply extends Component {
     return null;
   }
 }
+
+Reply.propTypes = {
+  intl: intlShape.isRequired,
+};
+
+export default injectIntl(Reply);

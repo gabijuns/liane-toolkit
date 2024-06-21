@@ -1,5 +1,18 @@
 import React, { Component } from "react";
+import {
+  injectIntl,
+  intlShape,
+  defineMessages,
+  FormattedMessage,
+} from "react-intl";
 import styled from "styled-components";
+
+const messages = defineMessages({
+  searchPlaceholder: {
+    id: "app.faq.search.placeholder",
+    defaultMessage: "Search for answers...",
+  },
+});
 
 const Container = styled.div`
   input {
@@ -7,6 +20,11 @@ const Container = styled.div`
     padding: 0.5rem;
     margin: 0;
     border-color: #eee;
+  }
+  .disclaimer {
+    margin: 0.5rem 0;
+    font-size: 0.9em;
+    color: #666;
   }
   .faq-list {
     display: flex;
@@ -25,6 +43,7 @@ const Container = styled.div`
       cursor: pointer;
       position: relative;
       background: #fff;
+      overflow: hidden;
       h3 {
         font-family: "Open sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
         margin: 0 0 0.25rem;
@@ -75,7 +94,7 @@ const Container = styled.div`
   }
 `;
 
-export default class FAQSelect extends Component {
+class FAQSelect extends Component {
   constructor(props) {
     super(props);
     this.state = {
@@ -83,7 +102,7 @@ export default class FAQSelect extends Component {
       isSearching: false,
       faq: [],
       searchResults: [],
-      selected: false
+      selected: false,
     };
   }
   componentDidMount() {
@@ -106,11 +125,11 @@ export default class FAQSelect extends Component {
     this.setState({ loading: true });
     Meteor.call("faq.query", { campaignId }, (err, res) => {
       this.setState({
-        loading: false
+        loading: false,
       });
       if (!err) {
         this.setState({
-          faq: res
+          faq: res,
         });
         if (typeof onLoad == "function") {
           onLoad(res);
@@ -118,9 +137,9 @@ export default class FAQSelect extends Component {
       }
     });
   };
-  search = str => {
+  search = (str) => {
     const { faq } = this.state;
-    let vals = faq.map(item => item.question + " " + item.answer);
+    let vals = faq.map((item) => item.question + " " + item.answer);
     let result = [];
     vals.forEach((v, i) => {
       if (v.toLowerCase().indexOf(str.toLowerCase()) != -1) {
@@ -129,24 +148,25 @@ export default class FAQSelect extends Component {
     });
     return result;
   };
-  _handleChange = ev => {
+  _handleChange = (ev) => {
     const { value } = ev.target;
     const { faq } = this.state;
     const result = value ? this.search(value) : [];
     this.setState({
       isSearching: !!value,
       searchResults: result,
-      selected: result.length == 1 ? result[0]._id : false
+      selected: result.length == 1 ? result[0]._id : false,
     });
   };
-  _handleClick = id => ev => {
+  _handleClick = (id) => (ev) => {
     ev.preventDefault();
     const { selected } = this.state;
     this.setState({
-      selected: selected == id ? false : id
+      selected: selected == id ? false : id,
     });
   };
   render() {
+    const { intl } = this.props;
     const { loading, selected, isSearching, faq, searchResults } = this.state;
     const data = isSearching ? searchResults : faq;
     if (loading) return null;
@@ -154,12 +174,12 @@ export default class FAQSelect extends Component {
       <Container className="faq-select">
         <input
           type="text"
-          placeholder="Search..."
+          placeholder={intl.formatMessage(messages.searchPlaceholder)}
           onChange={this._handleChange}
-          onKeyPress={e => e.key === "Enter" && e.preventDefault()}
+          onKeyPress={(e) => e.key === "Enter" && e.preventDefault()}
         />
         <div className="faq-list">
-          {data.map(item => (
+          {data.map((item) => (
             <article
               key={item._id}
               tabIndex="-1"
@@ -175,7 +195,21 @@ export default class FAQSelect extends Component {
             </article>
           ))}
         </div>
+        <p className="disclaimer">
+          <a href={FlowRouter.path("App.faq")} target="_blank">
+            <FormattedMessage
+              id="app.faq.search.disclaimer"
+              defaultMessage="Access your FAQ page to view all available answers"
+            />
+          </a>
+        </p>
       </Container>
     );
   }
 }
+
+FAQSelect.propTypes = {
+  intl: intlShape.isRequired,
+};
+
+export default injectIntl(FAQSelect);

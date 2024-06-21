@@ -22,7 +22,7 @@ const SUBSCRIPTION_FIELDS = [
   "message_deliveries",
   "message_reads",
   "messaging_postbacks",
-  "messaging_optins"
+  "messaging_optins",
 ];
 
 const FacebookAccountsHelpers = {
@@ -33,7 +33,7 @@ const FacebookAccountsHelpers = {
       Promise.await(
         FB.api(`${facebookAccountId}/subscribed_apps`, "post", {
           subscribed_fields: SUBSCRIPTION_FIELDS,
-          access_token: token
+          access_token: token,
         })
       );
     } catch (err) {
@@ -41,16 +41,45 @@ const FacebookAccountsHelpers = {
       throw new Meteor.Error(500, "Error trying to subscribe");
     }
   },
-  removeAccount({ facebookAccountId }) {
-    const account = FacebookAccounts.findOne({ facebookId: facebookAccountId });
-    if (!account) {
-      throw new Meteor.Error(404, "Facebook Account not found");
-    }
+  updateInstagramBusinessAccountId({ facebookId, token }) {
+    check(facebookId, String);
+    check(token, String);
 
-    Likes.remove({ facebookAccountId });
-    Comments.remove({ facebookAccountId });
-    Entries.remove({ facebookAccountId });
-    FacebookAccounts.remove(account._id);
+    logger.debug(
+      "FacebookAccountsHelpers.updateInstagramBusinessAccountId: called",
+      { facebookId }
+    );
+
+    const response = Promise.await(
+      FB.api(facebookId, {
+        fields: ["instagram_business_account"],
+        access_token: token,
+      })
+    );
+
+    if (response.instagram_business_account) {
+      const facebookAccount = FacebookAccounts.findOne({ facebookId });
+
+      const response_ig = Promise.await(
+        FB.api(response.instagram_business_account.id, {
+          fields: ["username"],
+          access_token: token,
+        })
+      );
+
+      let upsertObj;
+      if (response_ig && response_ig.username) {
+        upsertObj = {
+          $set: {
+            name: facebookAccount.name,
+            instagramBusinessAccountId: response.instagram_business_account.id,
+            instagramHandle: response_ig.username,
+          },
+        };
+      }
+
+      FacebookAccounts.upsert({ facebookId }, upsertObj);
+    }
   },
   getUserAccounts({ userId }) {
     check(userId, String);
@@ -72,9 +101,9 @@ const FacebookAccountsHelpers = {
     try {
       const response = Promise.await(
         FB.api("me/accounts", {
-          fields: ["name", "fan_count", "category", "access_token"],
+          fields: ["name", "fan_count", "category", "access_token", "tasks"],
           limit: 10,
-          access_token: accessToken
+          access_token: accessToken,
         })
       );
       data = response.data;
@@ -94,13 +123,37 @@ const FacebookAccountsHelpers = {
 
     return { result: data };
   },
+  disconnectFacebook({ facebookAccountId, token }) {
+    try {
+      Promise.await(
+        FB.api(`${facebookAccountId}/subscribed_apps`, "delete", {
+          access_token: token,
+        })
+      );
+    } catch (err) {
+      logger.error(err);
+    }
+  },
+  removeAccount({ facebookAccountId, token }) {
+    const account = FacebookAccounts.findOne({ facebookId: facebookAccountId });
+    if (!account) {
+      throw new Meteor.Error(404, "Facebook Account not found");
+    }
+
+    this.disconnectFacebook({ facebookAccountId, token });
+
+    Likes.remove({ facebookAccountId });
+    Comments.remove({ facebookAccountId });
+    Entries.remove({ facebookAccountId });
+    FacebookAccounts.remove(account._id);
+  },
   getUserAccount({ userId, facebookAccountId }) {
     check(userId, String);
     check(facebookAccountId, String);
 
     logger.debug("FacebookAccountsHelpers.getUserAccount: called", {
       userId,
-      facebookAccountId
+      facebookAccountId,
     });
 
     const user = Meteor.users.findOne(userId);
@@ -116,7 +169,7 @@ const FacebookAccountsHelpers = {
     return Promise.await(
       FB.api(facebookAccountId, {
         fields: ["name", "fan_count", "access_token", "category"],
-        access_token: accessToken
+        access_token: accessToken,
       })
     );
   },
@@ -128,11 +181,11 @@ const FacebookAccountsHelpers = {
         Object.assign(
           {
             grant_type: "fb_exchange_token",
-            fb_exchange_token: token
+            fb_exchange_token: token,
           },
           {
             client_id: Meteor.settings.facebook.clientId,
-            client_secret: Meteor.settings.facebook.clientSecret
+            client_secret: Meteor.settings.facebook.clientSecret,
           }
         )
       )
@@ -143,8 +196,20 @@ const FacebookAccountsHelpers = {
     check(facebookId, String);
     return Campaigns.find({
       status: { $ne: "suspended" },
-      "facebookAccount.facebookId": facebookId
+      "facebookAccount.facebookId": facebookId,
     }).fetch();
+  },
+  getFacebookAccount({ facebookId }) {
+    logger.debug("FacebookAccountsHelpers.getFacebookAccount called", {
+      facebookId,
+    });
+    return FacebookAccounts.findOne({ facebookId });
+  },
+  getInstagramAccount({ instagramBusinessAccountId }) {
+    logger.debug("FacebookAccountsHelpers.getInstagramAccount called", {
+      instagramBusinessAccountId,
+    });
+    return FacebookAccounts.findOne({ instagramBusinessAccountId });
   },
   fetchFBAccount({ userId, address }) {
     check(userId, String);
@@ -172,7 +237,7 @@ const FacebookAccountsHelpers = {
     return Promise.await(
       FB.api(id, {
         fields: ["name", "fan_count", "website", "link"],
-        access_token: accessToken
+        access_token: accessToken,
       })
     );
   },
@@ -196,10 +261,10 @@ const FacebookAccountsHelpers = {
         q,
         type: "page",
         fields: ["name", "fan_count", "website", "link"],
-        access_token: accessToken
+        access_token: accessToken,
       })
     );
-  }
+  },
 };
 
 exports.FacebookAccountsHelpers = FacebookAccountsHelpers;

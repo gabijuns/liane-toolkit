@@ -1,4 +1,10 @@
 import React, { Component } from "react";
+import {
+  injectIntl,
+  intlShape,
+  defineMessages,
+  FormattedMessage,
+} from "react-intl";
 import ReactDOM from "react-dom";
 import ReactTooltip from "react-tooltip";
 import styled from "styled-components";
@@ -6,21 +12,69 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import moment from "moment";
 import { get, debounce } from "lodash";
 
+import { userCan } from "/imports/ui2/utils/permissions";
+
 import { modalStore } from "../containers/Modal.jsx";
 
 import Table from "./Table.jsx";
 import Button from "./Button.jsx";
 import CopyToClipboard from "./CopyToClipboard.jsx";
 import Popup from "./Popup.jsx";
-import PersonMetaButtons from "./PersonMetaButtons.jsx";
+import PersonStarredButton from "./PersonStarredButton.jsx";
+import PersonMetaButtons, {
+  labels as personMetaLabels,
+} from "./PersonMetaButtons.jsx";
 import PersonSummary from "./PersonSummary.jsx";
 import PersonReactions from "./PersonReactions.jsx";
 import PersonEdit from "./PersonEdit.jsx";
+import PersonSocialNetworkIcons from "./PersonSocialNetworkIcons.jsx";
 import PersonContactIcons from "./PersonContactIcons.jsx";
+import PersonTags from "./PersonTags.jsx";
 import Reply from "./Reply.jsx";
+import { getFBCommentUrl } from "./Comment.jsx";
+
+const messages = defineMessages({
+  editingPersonTitle: {
+    id: "app.people.edit.title",
+    defaultMessage: "Editing {name}",
+  },
+  sendingPrivateReplyTitle: {
+    id: "app.people.sending_pr.title",
+    defaultMessage: "Sending private reply to {name}",
+  },
+  editCategories: {
+    id: "app.people.table_body.edit_categories",
+    defaultMessage: "Edit categories",
+  },
+});
 
 const Container = styled.div`
   width: 100%;
+  .person-tags {
+    margin-left: 1rem;
+    font-size: 0.7em;
+    svg {
+      font-size: 0.8em;
+      color: #ccc;
+      margin-right: 0.5rem;
+    }
+    .tag-item {
+      background: #f0f0f0;
+      color: #666;
+      border-radius: 7px;
+      padding: 0.2rem 0.4rem;
+      margin-right: 0.25rem;
+    }
+  }
+  .name-cell {
+    display: flex;
+    > .person-name {
+      flex: 1 1 100%;
+    }
+    > * {
+      flex: 0 0 auto;
+    }
+  }
   .extra-actions {
     position: absolute;
     top: 0;
@@ -67,6 +121,20 @@ const Container = styled.div`
       color: #000;
     }
   }
+  .person-reactions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 0 1rem;
+    p {
+      margin: 0 1.5rem 0 0;
+      font-weight: 600;
+    }
+    ul {
+      width: auto;
+      margin: 0;
+    }
+  }
   .person-extra {
     .person-comment-count {
       display: flex;
@@ -75,13 +143,28 @@ const Container = styled.div`
       justify-content: center;
       margin-bottom: 1rem;
       border-top: 1px solid #666;
-      padding-top: 1rem;
-      span {
+      padding: 0;
+      margin: 0;
+      .count-label {
         font-size: 1.2em;
-        margin-right: 1rem;
+        margin: 1rem 1rem 1rem 0;
         svg {
-          margin-right: 1rem;
+          margin-right: 0.5rem;
         }
+      }
+      .comments-counts {
+        .count-item {
+          margin: 0 0.5rem;
+        }
+      }
+      .button {
+        text-align: center;
+        margin: 1rem 0;
+        padding: 0.5rem;
+      }
+      .latest-comment {
+        font-size: 0.9em;
+        margin: 1rem 0 1rem 1rem;
       }
     }
   }
@@ -118,7 +201,7 @@ class PersonMetaCircles extends Component {
     const { person, ...props } = this.props;
     return (
       <MetaCircles {...props}>
-        {PersonMetaButtons.keys.map(key =>
+        {PersonMetaButtons.keys.map((key) =>
           get(person, `campaignMeta.${key}`) ? (
             <span key={key} className="meta-circle-container">
               <span
@@ -133,11 +216,71 @@ class PersonMetaCircles extends Component {
   }
 }
 
-export default class PeopleTable extends Component {
+function PersonCommentCount({ person }) {
+  const distributed = !!person.counts?.facebook;
+  if (distributed) {
+    const facebook = person.counts?.facebook?.comments || 0;
+    const instagram = person.counts?.instagram?.comments || 0;
+    return (
+      <span className="comments-counts">
+        <a
+          href={FlowRouter.path(
+            "App.people.detail",
+            {
+              personId: person._id,
+            },
+            {
+              section: "comments",
+            }
+          )}
+        >
+          {facebook ? (
+            <span className="count-item">
+              <FontAwesomeIcon icon={["fab", "facebook-square"]} />{" "}
+              <FormattedMessage
+                id="app.people.table_body.comment_count"
+                defaultMessage="{amount} comments"
+                values={{
+                  amount: facebook,
+                }}
+              />{" "}
+            </span>
+          ) : null}
+          {instagram ? (
+            <span className="count-item">
+              <FontAwesomeIcon icon={["fab", "instagram"]} />{" "}
+              <FormattedMessage
+                id="app.people.table_body.comment_count"
+                defaultMessage="{amount} comments"
+                values={{
+                  amount: instagram,
+                }}
+              />
+            </span>
+          ) : null}
+        </a>
+      </span>
+    );
+  }
+  return (
+    <>
+      <FontAwesomeIcon icon="comment" />{" "}
+      <FormattedMessage
+        id="app.people.table_body.comment_count"
+        defaultMessage="{amount} comments"
+        values={{
+          amount: person.counts?.comments || 0,
+        }}
+      />
+    </>
+  );
+}
+
+class PeopleTable extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      expanded: false
+      expanded: false,
     };
   }
   componentDidMount() {
@@ -164,12 +307,12 @@ export default class PeopleTable extends Component {
   componentWillUnmount() {
     window.removeEventListener("keydown", this._handleKeydown);
   }
-  _handleKeydown = ev => {
+  _handleKeydown = (ev) => {
     const { people } = this.props;
     const { expanded } = this.state;
     let curIndex = -1;
     if (expanded) {
-      curIndex = people.findIndex(p => {
+      curIndex = people.findIndex((p) => {
         return p._id == expanded._id;
       });
     }
@@ -179,7 +322,7 @@ export default class PeopleTable extends Component {
         case 27: // esc
           if (curIndex > -1) {
             this.setState({
-              expanded: false
+              expanded: false,
             });
           }
           break;
@@ -205,7 +348,7 @@ export default class PeopleTable extends Component {
         case 13: // (Enter) access profile
           if (curIndex > -1) {
             FlowRouter.go("App.people.detail", {
-              personId: people[curIndex]._id
+              personId: people[curIndex]._id,
             });
           }
         default:
@@ -213,12 +356,12 @@ export default class PeopleTable extends Component {
     }
     if (target) {
       this.setState({
-        expanded: target
+        expanded: target,
       });
       this.adjustScroll(target._id);
     }
   };
-  adjustScroll = debounce(personId => {
+  adjustScroll = debounce((personId) => {
     const containerOffset = this.container.getBoundingClientRect();
     const node = document.getElementById(`table-person-${personId}`);
     const nodeOffset = node.getBoundingClientRect();
@@ -233,21 +376,15 @@ export default class PeopleTable extends Component {
     }
   }, 100);
   _getReactions(person) {
-    if (person.counts) {
-      return person.counts.likes || 0;
-    }
-    return 0;
+    return person.counts?.facebook?.likes || person.counts?.likes || 0;
   }
   _getComments(person) {
-    if (person.counts) {
-      return person.counts.comments || 0;
-    }
-    return 0;
+    return person.counts?.comments || 0;
   }
-  _handleMetaButtonsChange = data => {
+  _handleMetaButtonsChange = (data) => {
     if (this.props.onChange) {
       const { people } = this.props;
-      const newPeople = people.map(p => {
+      const newPeople = people.map((p) => {
         if (p._id == data.personId) {
           if (!p.campaignMeta) {
             p.campaignMeta = {};
@@ -259,45 +396,54 @@ export default class PeopleTable extends Component {
       this.props.onChange(newPeople);
     }
   };
-  _handleEditSuccess = person => {
+  _handleEditSuccess = (person) => {
     if (this.props.onChange) {
       const { people } = this.props;
-      const newPeople = people.map(p => {
+      const newPeople = people.map((p) => {
         if (p._id == person._id) {
-          return person;
+          return { ...p, ...person };
         }
         return p;
       });
       this.props.onChange(newPeople);
     }
   };
-  _handleEditClick = person => ev => {
+  _handleEditClick = (person) => (ev) => {
+    const { intl, campaign } = this.props;
     ev.preventDefault();
-    modalStore.setTitle(`Editing ${person.name}`);
+    modalStore.setTitle(
+      intl.formatMessage(messages.editingPersonTitle, { name: person.name })
+    );
     modalStore.set(
-      <PersonEdit person={person} onSuccess={this._handleEditSuccess} />
+      <PersonEdit
+        campaign={campaign}
+        person={person}
+        onSuccess={this._handleEditSuccess}
+      />
     );
   };
-  expand = person => ev => {
+  expand = (person) => (ev) => {
     if (ev.target.nodeName == "A" || ev.target.closest("a")) {
       return false;
     }
+    ev.preventDefault();
+    ev.stopPropagation();
     const { expanded } = this.state;
     if (expanded && expanded._id == person._id) {
       this.setState({
-        expanded: false
+        expanded: false,
       });
     } else {
       this.setState({
-        expanded: person
+        expanded: person,
       });
     }
   };
-  isExpanded = person => {
+  isExpanded = (person) => {
     const { expanded } = this.state;
     return expanded && expanded._id == person._id;
   };
-  hasMeta = person => {
+  hasMeta = (person) => {
     let has = false;
     for (let key of PersonMetaButtons.keys) {
       if (get(person, `campaignMeta.${key}`)) {
@@ -306,83 +452,133 @@ export default class PeopleTable extends Component {
     }
     return has;
   };
-  personCategoriesText = person => {
+  personCategoriesText = (person) => {
+    const { intl } = this.props;
     let text = [];
-    PersonMetaButtons.keys.map(key => {
+    PersonMetaButtons.keys.map((key) => {
       if (get(person, `campaignMeta.${key}`)) {
-        text.push(PersonMetaButtons.labels[key]);
+        text.push(intl.formatMessage(personMetaLabels[key]));
       }
     });
     return text.join(", ");
   };
-  _handleSortClick = (key, defaultOrder = "desc") => () => {
-    const { options, onSort } = this.props;
-    const currentOrder = this.getSort(key);
-    let order;
-    if (!currentOrder) {
-      order = defaultOrder;
-    } else if (currentOrder != defaultOrder) {
-      order = false;
-    } else if (currentOrder == "asc") {
-      order = "desc";
-    } else if (currentOrder == "desc") {
-      order = "asc";
-    }
-    if (onSort) {
-      onSort(key, order);
-    }
-  };
-  getSort = key => {
+  _handleSortClick =
+    (key, defaultOrder = "desc") =>
+    () => {
+      const { options, onSort } = this.props;
+      const currentOrder = this.getSort(key);
+      let order;
+      if (!currentOrder) {
+        order = defaultOrder;
+      } else if (currentOrder != defaultOrder) {
+        order = false;
+      } else if (currentOrder == "asc") {
+        order = "desc";
+      } else if (currentOrder == "desc") {
+        order = "asc";
+      }
+      if (onSort) {
+        onSort(key, order);
+      }
+    };
+  getSort = (key) => {
     const { options } = this.props;
     if (options["sort"] == key) {
       return options["order"];
     }
     return false;
   };
-  _handlePrivateReplyClick = person => ev => {
+  _handlePrivateReplyClick = (person) => (ev) => {
+    const { intl } = this.props;
     ev.preventDefault();
-    modalStore.setTitle(`Sending private reply to ${person.name}`);
+    modalStore.setTitle(
+      intl.formatMessage(messages.sendingPrivateReplyTitle, {
+        name: person.name,
+      })
+    );
     modalStore.set(<Reply personId={person._id} messageOnly={true} />);
   };
+  getTags(person) {
+    const { tags } = this.props;
+    const personTags = get(person, "campaignMeta.basic_info.tags");
+    if (personTags && personTags.length && tags && tags.length) {
+      return tags
+        .filter((tag) => personTags.indexOf(tag._id) !== -1)
+        .map((tag) => tag.name);
+    }
+    return [];
+  }
+  hasReactions(person) {
+    if (!person.counts?.facebook?.reactions && !person.counts?.reactions)
+      return;
+    const reactions =
+      person.counts?.facebook?.reactions || person.counts?.reactions;
+    let total = 0;
+    for (const reaction in reactions) {
+      total += reactions[reaction];
+    }
+    return !!total;
+  }
   render() {
-    const { people, onChange, onSort, ...props } = this.props;
-    const { expanded } = this.state;
+    const { intl, people, tags, onChange, onSort, ...props } = this.props;
     return (
       <Container className="people-table">
         {people && people.length ? (
           <Table {...props}>
             <thead>
               <tr>
-                <th />
+                <th colSpan="2" />
                 <Table.SortableHead
                   className="fill"
                   onClick={this._handleSortClick("name", "asc")}
                   sorted={this.getSort("name")}
+                  colSpan="2"
                 >
-                  Name
+                  <FormattedMessage
+                    id="app.people.table_header.name"
+                    defaultMessage="Name"
+                  />
                 </Table.SortableHead>
                 <Table.SortableHead
                   onClick={this._handleSortClick("likes")}
                   sorted={this.getSort("likes")}
                 >
-                  Reactions
+                  <FontAwesomeIcon
+                    className="th-icon"
+                    icon={["fab", "facebook-square"]}
+                  />
+                  <FormattedMessage
+                    id="app.people.table_header.reactions"
+                    defaultMessage="Reactions"
+                  />
                 </Table.SortableHead>
                 <Table.SortableHead
                   onClick={this._handleSortClick("comments")}
                   sorted={this.getSort("comments")}
                 >
-                  Comments
+                  <FormattedMessage
+                    id="app.people.table_header.comments"
+                    defaultMessage="Comments"
+                  />
                 </Table.SortableHead>
-                <th>Contact</th>
+                <th>
+                  <FormattedMessage
+                    id="app.people.table_header.contact"
+                    defaultMessage="Contact"
+                  />
+                </th>
                 <Table.SortableHead
                   onClick={this._handleSortClick("lastInteraction")}
                   sorted={this.getSort("lastInteraction")}
                 >
-                  Last interaction
+                  <FormattedMessage
+                    id="app.people.table_header.last_interaction"
+                    defaultMessage="Last interaction"
+                  />
                 </Table.SortableHead>
               </tr>
             </thead>
-            {people.map(person => (
+            {people.map((person) => (
               <tbody
                 key={person._id}
                 className={this.isExpanded(person) ? "active" : ""}
@@ -392,57 +588,88 @@ export default class PeopleTable extends Component {
                   className="interactive"
                   onClick={this.expand(person)}
                 >
-                  <td style={{ width: "20px", textAlign: "center" }}>
-                    <Popup
-                      trigger={open => (
-                        <div data-tip data-for={`person-meta-${person._id}`}>
-                          {this.hasMeta(person) ? (
-                            <PersonMetaCircles person={person} />
-                          ) : (
-                            <FontAwesomeIcon
-                              icon="grip-horizontal"
-                              className="meta-trigger"
-                            />
-                          )}
-                        </div>
-                      )}
-                      direction="top left"
-                      rounded
-                    >
-                      <PersonMetaButtons
-                        person={person}
-                        onChange={this._handleMetaButtonsChange}
-                        interactive
-                      />
-                    </Popup>
-                    <ReactTooltip
-                      id={`person-meta-${person._id}`}
-                      aria-haspopup="true"
-                      place="left"
-                      effect="solid"
-                    >
-                      {this.hasMeta(person)
-                        ? this.personCategoriesText(person)
-                        : "Edit categories"}
-                    </ReactTooltip>
+                  <td style={{ borderRight: 0, paddingRight: 0 }}>
+                    <PersonStarredButton
+                      readOnly={!userCan("categorize", "people")}
+                      person={person}
+                      onChange={this._handleMetaButtonsChange}
+                    />
                   </td>
-                  <td className="fill highlight">
+                  <td style={{ width: "20px", textAlign: "center" }}>
+                    {userCan("categorize", "people") ? (
+                      <Popup
+                        trigger={(open) => (
+                          <div data-tip data-for={`person-meta-${person._id}`}>
+                            {this.hasMeta(person) ? (
+                              <PersonMetaCircles person={person} />
+                            ) : (
+                              <FontAwesomeIcon
+                                icon="grip-horizontal"
+                                className="meta-trigger"
+                              />
+                            )}
+                          </div>
+                        )}
+                        direction="top left"
+                        rounded
+                      >
+                        <PersonMetaButtons
+                          person={person}
+                          onChange={this._handleMetaButtonsChange}
+                          interactive
+                        />
+                      </Popup>
+                    ) : (
+                      <div data-tip data-for={`person-meta-${person._id}`}>
+                        <PersonMetaCircles person={person} />
+                      </div>
+                    )}
+                    {this.hasMeta(person) || userCan("categorize", "people") ? (
+                      <ReactTooltip
+                        id={`person-meta-${person._id}`}
+                        aria-haspopup="true"
+                        place="bottom"
+                        effect="solid"
+                      >
+                        {this.hasMeta(person)
+                          ? this.personCategoriesText(person)
+                          : intl.formatMessage(messages.editCategories)}
+                      </ReactTooltip>
+                    ) : null}
+                  </td>
+                  <td className="fill highlight" style={{ borderRight: 0 }}>
                     <p className="extra-actions show-on-hover">
                       <a
                         href={FlowRouter.path("App.people.detail", {
-                          personId: person._id
+                          personId: person._id,
                         })}
                       >
-                        Access profile
+                        <FormattedMessage
+                          id="app.people.table_body.access_profile"
+                          defaultMessage="Access profile"
+                        />
                       </a>
-                      <a
-                        href="javascript:void(0);"
-                        onClick={this._handleEditClick(person)}
-                      >
-                        Edit
-                      </a>
+                      {userCan("edit", "people") ? (
+                        <a
+                          href="javascript:void(0);"
+                          onClick={this._handleEditClick(person)}
+                        >
+                          <FormattedMessage
+                            id="app.people.table_body.edit"
+                            defaultMessage="Edit"
+                          />
+                        </a>
+                      ) : null}
                     </p>
-                    <span className="person-name">{person.name}</span>
+                    <span className="person-name">
+                      {person.name}
+                      {!this.isExpanded(person) ? (
+                        <PersonTags tags={tags} person={person} />
+                      ) : null}
+                    </span>
+                  </td>
+                  <td>
+                    <PersonSocialNetworkIcons person={person} />
                   </td>
                   <td className="small icon-number">
                     <FontAwesomeIcon icon="dot-circle" />
@@ -463,7 +690,7 @@ export default class PeopleTable extends Component {
                 </tr>
                 {this.isExpanded(person) ? (
                   <tr className="person-extra">
-                    <td className="extra">
+                    <td className="extra" colSpan="2">
                       <PersonMetaButtons
                         person={person}
                         vertical
@@ -471,29 +698,59 @@ export default class PeopleTable extends Component {
                         simple
                       />
                     </td>
-                    <td className="extra fill">
-                      <PersonSummary person={person} tags={this.props.tags} />
+                    <td className="extra fill" colSpan="1">
+                      <PersonSummary
+                        person={person}
+                        tags={this.props.tags}
+                        onUpdate={this._handleEditSuccess}
+                      />
                     </td>
-                    <td className="extra" colSpan="4">
-                      <div className="person-reactions">
-                        <PersonReactions person={person} />
-                      </div>
+                    <td className="extra" colSpan="5">
+                      {this.hasReactions(person) ? (
+                        <div className="person-reactions">
+                          <p>
+                            <FormattedMessage
+                              id="app.people.table_body.facebook_reactions"
+                              defaultMessage="Facebook reactions:"
+                            />
+                          </p>
+                          <PersonReactions person={person} />
+                        </div>
+                      ) : null}
                       <p className="person-comment-count">
-                        <span>
-                          <FontAwesomeIcon icon="comment" />{" "}
-                          {this._getComments(person)} comments
+                        <span className="count-label">
+                          <PersonCommentCount person={person} />
                         </span>
-                        {person.canReceivePrivateReply &&
+                        {userCan("edit", "comments") &&
+                        person.canReceivePrivateReply &&
                         person.canReceivePrivateReply.length ? (
                           <Button
                             light
                             onClick={this._handlePrivateReplyClick(person)}
                           >
-                            Send private reply
+                            <FormattedMessage
+                              id="app.people.table_body.private_reply_button"
+                              defaultMessage="Send private reply"
+                            />
                           </Button>
                         ) : null}
+                        {person.latestComment ? (
+                          <a
+                            href={getFBCommentUrl(person.latestComment)}
+                            target="_blank"
+                            rel="external"
+                            className="latest-comment"
+                          >
+                            <FontAwesomeIcon
+                              icon={["fab", "facebook-square"]}
+                            />{" "}
+                            <FormattedMessage
+                              id="app.people.table_body.latest_comment_label"
+                              defaultMessage="Go to latest comment"
+                            />
+                          </a>
+                        ) : null}
                       </p>
-                      <p className="person-buttons" />
                     </td>
                   </tr>
                 ) : null}
@@ -501,7 +758,19 @@ export default class PeopleTable extends Component {
             ))}
           </Table>
         ) : null}
+        <ReactTooltip
+          id="people-table-header-tip"
+          aria-haspopup="true"
+          place="top"
+          effect="solid"
+        />
       </Container>
     );
   }
 }
+
+PeopleTable.propTypes = {
+  intl: intlShape.isRequired,
+};
+
+export default injectIntl(PeopleTable);

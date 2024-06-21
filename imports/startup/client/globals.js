@@ -1,18 +1,24 @@
-// Privacy policy
-(function(w, d) {
-  var loader = function() {
-    setTimeout(function() {
-      var s = d.createElement("script"),
-      tag = d.getElementsByTagName("script")[0];
-      s.src = "//cdn.iubenda.com/iubenda.js";
-      tag.parentNode.insertBefore(s, tag);
-    }, 1000);
-  };
-  if (w.addEventListener) {
-    w.addEventListener("load", loader, false);
-  } else if (w.attachEvent) {
-    w.attachEvent("onload", loader);
-  } else {
-    w.onload = loader;
+import moment from "moment";
+require("moment/locale/es");
+require("moment/locale/pt-br");
+require("iframe-resizer/js/iframeResizer.contentWindow.js");
+
+import { registerLocale, setDefaultLocale } from "react-datepicker";
+import { enUS, es, ptBR } from "date-fns/esm/locale";
+registerLocale("en", enUS);
+registerLocale("es", es);
+registerLocale("pt-BR", ptBR);
+
+updateDepsLocales = (locale) => {
+  if (locale) {
+    moment.locale(locale.toLowerCase());
+    setDefaultLocale(locale);
   }
-})(window, document);
+};
+
+
+// Set iframe class
+if(window.self !== window.top) {
+  const body = document.getElementsByTagName("BODY")[0]
+  body.className += " iframe";
+}
